@@ -1,0 +1,21 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <!-- Pure file/path logic only — no Windows-specific TFM needed, so tests run fast and headless. -->
+    <TargetFramework>net9.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <RootNamespace>Clipfoo.Tests</RootNamespace>
+    <AssemblyName>Clipfoo.Tests</AssemblyName>
+  </PropertyGroup>
+
+  <!-- Test the real production code by compiling the dependency-free units directly. -->
+  <ItemGroup>
+    <Compile Include="..\..\src\ClipFiles.cs" Link="src\ClipFiles.cs" />
+    <Compile Include="..\..\src\FastStart.cs" Link="src\FastStart.cs" />
+    <Compile Include="..\..\src\AppConfig.cs" Link="src\AppConfig.cs" />
+  </ItemGroup>
+
+</Project>
