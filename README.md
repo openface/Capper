@@ -65,11 +65,11 @@ Recording is **preset** — you just hotkey. Settings are saved in the tray's Co
 
   | Preset | Resolution | FPS | Bitrate | Use case |
   |--------|-----------:|----:|--------:|----------|
-  | **Discord** | 720p | 30 | ~2.5 Mbps | Default; safe all-round sharing |
-  | **Small file** | 480p | 30 | ~1.2 Mbps | Longer clips, smaller uploads |
-  | **Smooth** | 720p | 60 | ~4.5 Mbps | Gameplay / fast motion |
-  | **Sharp** | 1080p | 30 | ~5 Mbps | Text, UI, tutorials |
-  | **Original quality** | source | 60 | ~8 Mbps | Save locally / upload elsewhere |
+  | **Quick share** | 720p | 30 | ~2.5 Mbps | Default; drop straight into Discord-style chats |
+  | **Long clip** | 480p | 30 | ~1.2 Mbps | Keep long recordings under the size limit |
+  | **Gameplay** | 720p | 60 | ~6 Mbps | Smooth, fast motion |
+  | **Tutorial** | 1080p | 30 | ~5 Mbps | Crisp text, menus, UI |
+  | **Original** | source | 60 | ~16 Mbps | Max quality to keep locally or edit |
 
   Resolution is the target *height*; the source aspect ratio is preserved and never upscaled.
 - **Audio** — capture the system mix (WASAPI loopback) on/off, plus AAC bitrate (96–192 kbps).

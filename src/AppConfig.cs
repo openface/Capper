@@ -56,14 +56,17 @@ public enum AudioSource
     System,  // WASAPI loopback — what you hear (app/game/video sound)
 }
 
-/// <summary>Use-case capture presets that bundle output resolution, frame rate, and bitrate.</summary>
+/// <summary>Use-case capture presets that bundle output resolution, frame rate, and bitrate.
+/// Each name says what the clip is *for*. The order is load-bearing: <see cref="ConfigForm"/> maps
+/// the combo-box index to <c>(int)</c> the enum value, so new presets must be appended, not inserted.
+/// Legacy names from before the rename are migrated on load by <see cref="VideoPresetJsonConverter"/>.</summary>
 public enum VideoPreset
 {
-    Discord,          // 720p / 30 fps — safe all-round for Discord-style sharing
-    SmallFile,        // 480p / 30 fps — longer clips, smaller files
-    Smooth,           // 720p / 60 fps — gameplay / fast motion
-    Sharp,            // 1080p / 30 fps — text, UI, tutorials
-    OriginalQuality,  // source resolution / 60 fps — save locally / upload elsewhere
+    QuickShare,  // 720p / 30 fps — default; drop straight into chat, plays anywhere (was "Discord")
+    LongClip,    // 480p / 30 fps — keep a long recording under the size limit (was "SmallFile")
+    Gameplay,    // 720p / 60 fps — fast motion without judder (was "Smooth")
+    Tutorial,    // 1080p / 30 fps — crisp text, menus, UI (was "Sharp")
+    Original,    // source resolution / 60 fps — max quality to keep or edit (was "OriginalQuality")
 }
 
 /// <summary>What the recorder captures.</summary>
@@ -88,8 +91,8 @@ public sealed class AppConfig
     public Hotkey Hotkey { get; set; } = new();
 
     /// <summary>The selected capture preset (drives resolution, frame rate, and bitrate).</summary>
-    [JsonConverter(typeof(JsonStringEnumConverter))]
-    public VideoPreset Preset { get; set; } = VideoPreset.Discord;
+    [JsonConverter(typeof(VideoPresetJsonConverter))]
+    public VideoPreset Preset { get; set; } = VideoPreset.QuickShare;
 
     /// <summary>Target output height in pixels; the source aspect ratio is preserved and the image
     /// is never upscaled past the source. 0 = keep the source resolution.</summary>
@@ -120,31 +123,31 @@ public sealed class AppConfig
     /// <summary>The (output height, fps, bitrate-kbps) a preset resolves to. Height 0 = source.</summary>
     public static (int Height, int Fps, int Kbps) PresetValues(VideoPreset p) => p switch
     {
-        VideoPreset.Discord => (720, 30, 2500),
-        VideoPreset.SmallFile => (480, 30, 1200),
-        VideoPreset.Smooth => (720, 60, 4500),
-        VideoPreset.Sharp => (1080, 30, 5000),
-        VideoPreset.OriginalQuality => (0, 60, 8000),
+        VideoPreset.QuickShare => (720, 30, 2500),
+        VideoPreset.LongClip => (480, 30, 1200),
+        VideoPreset.Gameplay => (720, 60, 6000),
+        VideoPreset.Tutorial => (1080, 30, 5000),
+        VideoPreset.Original => (0, 60, 16000),
         _ => (720, 30, 2500),
     };
 
     public static string PresetLabel(VideoPreset p) => p switch
     {
-        VideoPreset.Discord => "Discord — 720p, 30 fps",
-        VideoPreset.SmallFile => "Small file — 480p, 30 fps",
-        VideoPreset.Smooth => "Smooth — 720p, 60 fps",
-        VideoPreset.Sharp => "Sharp — 1080p, 30 fps",
-        VideoPreset.OriginalQuality => "Original quality — source, 60 fps",
+        VideoPreset.QuickShare => "Quick share — 720p, 30 fps",
+        VideoPreset.LongClip => "Long clip — 480p, 30 fps",
+        VideoPreset.Gameplay => "Gameplay — 720p, 60 fps",
+        VideoPreset.Tutorial => "Tutorial — 1080p, 30 fps",
+        VideoPreset.Original => "Original — source, 60 fps",
         _ => p.ToString(),
     };
 
     public static string PresetHint(VideoPreset p) => p switch
     {
-        VideoPreset.Discord => "Best all-round for sharing to Discord and similar chats.",
-        VideoPreset.SmallFile => "Lower resolution for longer clips and smaller uploads.",
-        VideoPreset.Smooth => "Higher frame rate for gameplay and fast motion.",
-        VideoPreset.Sharp => "Full 1080p for crisp text, menus and tutorials.",
-        VideoPreset.OriginalQuality => "Records at the source resolution — largest files.",
+        VideoPreset.QuickShare => "Best all-round for sharing to Discord and similar chats.",
+        VideoPreset.LongClip => "Lower resolution for longer recordings and smaller uploads.",
+        VideoPreset.Gameplay => "Higher frame rate to keep fast motion smooth.",
+        VideoPreset.Tutorial => "Full 1080p for crisp text, menus and tutorials.",
+        VideoPreset.Original => "Records at the source resolution — largest files.",
         _ => "",
     };
 
@@ -229,4 +232,39 @@ public sealed class AppConfig
             RunAtStartup = RunAtStartup,
         };
     }
+}
+
+/// <summary>
+/// Serializes <see cref="VideoPreset"/> as its name, and on read accepts both the current names and
+/// the legacy names from before the rename, so an existing <c>config.json</c> keeps its chosen preset
+/// instead of silently resetting. Unknown values fall back to the default rather than throwing.
+/// </summary>
+public sealed class VideoPresetJsonConverter : JsonConverter<VideoPreset>
+{
+    public override VideoPreset Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
+    {
+        if (reader.TokenType == JsonTokenType.Number && reader.TryGetInt32(out int n)
+            && Enum.IsDefined(typeof(VideoPreset), n))
+            return (VideoPreset)n;
+
+        return reader.GetString() switch
+        {
+            // Current names.
+            "QuickShare" => VideoPreset.QuickShare,
+            "LongClip" => VideoPreset.LongClip,
+            "Gameplay" => VideoPreset.Gameplay,
+            "Tutorial" => VideoPreset.Tutorial,
+            "Original" => VideoPreset.Original,
+            // Legacy names (pre-rename) — migrated so old configs don't reset.
+            "Discord" => VideoPreset.QuickShare,
+            "SmallFile" => VideoPreset.LongClip,
+            "Smooth" => VideoPreset.Gameplay,
+            "Sharp" => VideoPreset.Tutorial,
+            "OriginalQuality" => VideoPreset.Original,
+            _ => VideoPreset.QuickShare,
+        };
+    }
+
+    public override void Write(Utf8JsonWriter writer, VideoPreset value, JsonSerializerOptions options)
+        => writer.WriteStringValue(value.ToString());
 }

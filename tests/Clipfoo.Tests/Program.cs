@@ -75,18 +75,27 @@ try
 
     // ---------------------------------------------------------------
     Console.WriteLine("AppConfig video presets");
-    Check("Discord preset resolves to 720p/30/2500", AppConfig.PresetValues(VideoPreset.Discord) == (720, 30, 2500));
-    Check("OriginalQuality keeps source resolution (height 0)", AppConfig.PresetValues(VideoPreset.OriginalQuality).Height == 0);
+    Check("QuickShare preset resolves to 720p/30/2500", AppConfig.PresetValues(VideoPreset.QuickShare) == (720, 30, 2500));
+    Check("Original keeps source resolution (height 0)", AppConfig.PresetValues(VideoPreset.Original).Height == 0);
     var cfgP = new AppConfig();
-    cfgP.ApplyPreset(VideoPreset.SmallFile);
+    cfgP.ApplyPreset(VideoPreset.LongClip);
     Check("ApplyPreset sets height/fps/bitrate together",
-        cfgP is { Preset: VideoPreset.SmallFile, TargetHeight: 480, Fps: 30, VideoBitrateKbps: 1200 });
+        cfgP is { Preset: VideoPreset.LongClip, TargetHeight: 480, Fps: 30, VideoBitrateKbps: 1200 });
     Check("Clone preserves preset + target height",
-        cfgP.Clone() is { Preset: VideoPreset.SmallFile, TargetHeight: 480 });
+        cfgP.Clone() is { Preset: VideoPreset.LongClip, TargetHeight: 480 });
     var pj = System.Text.Json.JsonSerializer.Serialize(cfgP);
-    Check("Preset serializes as a string", pj.Contains("\"SmallFile\""));
+    Check("Preset serializes as its name", pj.Contains("\"LongClip\""));
     Check("Preset round-trips through JSON",
-        System.Text.Json.JsonSerializer.Deserialize<AppConfig>(pj)!.Preset == VideoPreset.SmallFile);
+        System.Text.Json.JsonSerializer.Deserialize<AppConfig>(pj)!.Preset == VideoPreset.LongClip);
+
+    // Legacy config.json (pre-rename) must migrate to the new preset, not reset to default.
+    string legacy = "{\"Preset\":\"Discord\"}";
+    Check("legacy \"Discord\" migrates to QuickShare",
+        System.Text.Json.JsonSerializer.Deserialize<AppConfig>(legacy)!.Preset == VideoPreset.QuickShare);
+    Check("legacy \"OriginalQuality\" migrates to Original",
+        System.Text.Json.JsonSerializer.Deserialize<AppConfig>("{\"Preset\":\"OriginalQuality\"}")!.Preset == VideoPreset.Original);
+    Check("legacy \"Sharp\" migrates to Tutorial",
+        System.Text.Json.JsonSerializer.Deserialize<AppConfig>("{\"Preset\":\"Sharp\"}")!.Preset == VideoPreset.Tutorial);
 
     // ---------------------------------------------------------------
     Console.WriteLine("FastStart relocates moov ahead of mdat and fixes chunk offsets");
