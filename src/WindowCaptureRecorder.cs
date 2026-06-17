@@ -181,7 +181,7 @@ public sealed class WindowCaptureRecorder : IDisposable
         try
         {
             IntPtr codecPtr = _writer.GetServiceForStream(_streamIndex, Guid.Empty, H264EncoderConfig.IID_ICodecAPI);
-            EncoderConfigLog = codecPtr != IntPtr.Zero ? H264EncoderConfig.Apply(codecPtr) : "codecapi: null";
+            EncoderConfigLog = codecPtr != IntPtr.Zero ? H264EncoderConfig.Apply(codecPtr, cfg.VideoBitrateKbps) : "codecapi: null";
         }
         catch (Exception ex) { EncoderConfigLog = "codecapi: " + ex.Message; }
 

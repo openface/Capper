@@ -18,16 +18,34 @@ internal static class H264EncoderConfig
     private static readonly Guid AVEncMPVDefaultBPictureCount = new("8d390aac-dc5c-4200-b57f-814d04babab2");
     private static readonly Guid AVEncCommonQualityVsSpeed = new("98332df8-03cd-476b-89fa-3f9e442dec9f");
     private static readonly Guid AVEncVideoMaxNumRefFrame = new("964829ed-94f9-43b4-b74d-ef40944b69a0");
+    private static readonly Guid AVEncCommonRateControlMode = new("1c0608e9-370c-4710-8a58-cb6181c42423");
+    private static readonly Guid AVEncCommonMeanBitRate = new("f7222374-2144-4815-b550-a37f8e12ee52");
+    private static readonly Guid AVEncCommonMaxBitRate = new("9651eae4-39b9-4ebf-85ef-d7f444ec7465");
+
+    // eAVEncCommonRateControlMode_PeakConstrainedVBR: average toward the mean, but allowed to spike to
+    // the max on hard frames so motion/foliage stops macroblocking. 1 from the codecapi enum.
+    private const uint RateControlPeakConstrainedVBR = 1;
+    // How far the peak may exceed the mean. Kept modest (a relief valve, not a blank cheque) so busy
+    // clips don't balloon past Discord's size limit.
+    private const double PeakRatio = 2.0;
 
     /// <summary>Configure the encoder behind <paramref name="codecApiPtr"/> (an ICodecAPI*, ownership
-    /// transferred). Returns a short log of what applied.</summary>
-    public static string Apply(IntPtr codecApiPtr)
+    /// transferred). <paramref name="avgBitrateKbps"/> is the preset's target average bitrate; the peak
+    /// is allowed up to <see cref="PeakRatio"/>× that. Returns a short log of what applied.</summary>
+    public static string Apply(IntPtr codecApiPtr, int avgBitrateKbps)
     {
         var codec = (ICodecAPI)Marshal.GetObjectForIUnknown(codecApiPtr);
         Marshal.Release(codecApiPtr);
         var log = new StringBuilder();
         try
         {
+            // Peak-constrained VBR first (it gates whether the mean/max bitrates are honoured), then
+            // the bitrate envelope, then the per-frame quality knobs.
+            uint meanBps = (uint)Math.Max(1, avgBitrateKbps) * 1000u;
+            uint maxBps = (uint)(meanBps * PeakRatio);
+            SetU32(codec, AVEncCommonRateControlMode, RateControlPeakConstrainedVBR, log, "ratectl");
+            SetU32(codec, AVEncCommonMeanBitRate, meanBps, log, "mean");
+            SetU32(codec, AVEncCommonMaxBitRate, maxBps, log, "peak");
             SetU32(codec, AVEncMPVDefaultBPictureCount, 1, log, "bframes");
             SetU32(codec, AVEncVideoMaxNumRefFrame, 2, log, "refframes");
             SetU32(codec, AVEncCommonQualityVsSpeed, 70, log, "qvs");
