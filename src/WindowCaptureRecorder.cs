@@ -41,6 +41,9 @@ public sealed class WindowCaptureRecorder : IDisposable
     /// (as opposed to no scaling or the Media Foundation fallback).</summary>
     public bool UsedGpuScaler => _scaler != null;
 
+    /// <summary>Diagnostic: which encoder tunings applied (B-frames, quality-vs-speed, …).</summary>
+    public string EncoderConfigLog { get; private set; } = "";
+
     // D3D / capture
     private ID3D11Device? _device;
     private ID3D11DeviceContext? _context;
@@ -151,6 +154,9 @@ public sealed class WindowCaptureRecorder : IDisposable
         outType.Set(MediaTypeAttributeKeys.Subtype, VideoFormatGuids.H264);
         outType.Set(MediaTypeAttributeKeys.AvgBitrate, (uint)(cfg.VideoBitrateKbps * 1000));
         outType.Set(MediaTypeAttributeKeys.InterlaceMode, (uint)2); // progressive
+        // High profile (100) instead of the encoder's Baseline default → CABAC + 8x8 transform +
+        // B-frame support, i.e. noticeably better quality at the same bitrate.
+        outType.Set(MediaTypeAttributeKeys.Mpeg2Profile, (uint)100);
         outType.Set(MediaTypeAttributeKeys.FrameSize, Pack((uint)_outW, (uint)_outH)); // scaled target
         outType.Set(MediaTypeAttributeKeys.FrameRate, Pack((uint)_fps, 1u));
         outType.Set(MediaTypeAttributeKeys.PixelAspectRatio, Pack(1u, 1u));
@@ -170,6 +176,14 @@ public sealed class WindowCaptureRecorder : IDisposable
         // Output size isn't capped here — the user trims to a length after recording.
         _writer.SetInputMediaType(_streamIndex, inType, null);
         inType.Dispose();
+
+        // Tune the now-instantiated encoder MFT (B-frames, quality-vs-speed) for better quality/byte.
+        try
+        {
+            IntPtr codecPtr = _writer.GetServiceForStream(_streamIndex, Guid.Empty, H264EncoderConfig.IID_ICodecAPI);
+            EncoderConfigLog = codecPtr != IntPtr.Zero ? H264EncoderConfig.Apply(codecPtr) : "codecapi: null";
+        }
+        catch (Exception ex) { EncoderConfigLog = "codecapi: " + ex.Message; }
 
         // Optional system-audio (loopback) stream, added before BeginWriting.
         if (cfg.AudioSource == AudioSource.System)
