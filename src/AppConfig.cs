@@ -2,7 +2,7 @@ using System.IO;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 
-namespace Clipfoo;
+namespace Capper;
 
 /// <summary>
 /// A global hotkey expressed as Win32 RegisterHotKey modifiers + virtual-key code.
@@ -115,7 +115,7 @@ public sealed class AppConfig
     /// <summary>Target AAC audio bitrate when audio is enabled.</summary>
     public int AudioBitrateKbps { get; set; } = 128;
 
-    /// <summary>Launch Clipfoo automatically when you log in (runs as a tray agent).</summary>
+    /// <summary>Launch Capper automatically when you log in (runs as a tray agent).</summary>
     public bool RunAtStartup { get; set; } = false;
 
     // --- Presets ---
@@ -179,12 +179,12 @@ public sealed class AppConfig
     };
 
     public static string AppDataDir =>
-        Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "Clipfoo");
+        Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "Capper");
 
     public static string ConfigPath => Path.Combine(AppDataDir, "config.json");
 
     public static string DefaultOutputDirectory() =>
-        Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyVideos), "Clipfoo");
+        Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyVideos), "Capper");
 
     public static AppConfig Load()
     {

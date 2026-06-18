@@ -1,6 +1,6 @@
 using System.IO;
 
-namespace Clipfoo;
+namespace Capper;
 
 /// <summary>
 /// Relocates an MP4's <c>moov</c> atom ahead of <c>mdat</c> ("fast-start"), so players can begin

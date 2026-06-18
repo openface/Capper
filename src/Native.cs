@@ -4,7 +4,7 @@ using Windows.Graphics.Capture;
 using Windows.Graphics.DirectX.Direct3D11;
 using WinRT;
 
-namespace Clipfoo;
+namespace Capper;
 
 /// <summary>
 /// Win32 / WinRT interop needed to identify the active window and bridge it into

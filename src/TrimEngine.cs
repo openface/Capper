@@ -6,7 +6,7 @@ using Windows.Media.MediaProperties;
 using Windows.Media.Transcoding;
 using Windows.Storage;
 
-namespace Clipfoo;
+namespace Capper;
 
 /// <summary>Probe + trim/re-encode clips using the native Windows.Media.Editing pipeline.</summary>
 internal static class TrimEngine

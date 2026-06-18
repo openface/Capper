@@ -3,7 +3,7 @@ using System.Drawing.Drawing2D;
 using System.Runtime.InteropServices;
 using System.Windows.Forms;
 
-namespace Clipfoo;
+namespace Capper;
 
 /// <summary>
 /// A small, non-activating "Now Recording" indicator pill shown at the bottom of the screen while

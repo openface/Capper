@@ -2,7 +2,7 @@ using System.Drawing;
 using System.Drawing.Drawing2D;
 using System.Runtime.InteropServices;
 
-namespace Clipfoo;
+namespace Capper;
 
 /// <summary>Generates the tray icons at runtime so no .ico asset needs to ship.</summary>
 internal static class TrayIcons

@@ -2,7 +2,7 @@ using System.Drawing;
 using System.IO;
 using System.Windows.Forms;
 
-namespace Clipfoo;
+namespace Capper;
 
 /// <summary>Tray settings window: capture mode, quality preset, audio, hotkey, output folder, run-at-login.</summary>
 internal sealed class ConfigForm : Form
@@ -19,7 +19,7 @@ internal sealed class ConfigForm : Form
     private readonly Label _presetHint = new() { ForeColor = Color.Gray, Font = new Font("Segoe UI", 8f), AutoSize = false };
     private readonly CheckBox _captureAudio = new() { Text = "Capture system audio (what you hear)" };
     private readonly ComboBox _audioKbps = new() { DropDownStyle = ComboBoxStyle.DropDownList };
-    private readonly CheckBox _runAtStartup = new() { Text = "Run Clipfoo at login (background tray agent)" };
+    private readonly CheckBox _runAtStartup = new() { Text = "Run Capper at login (background tray agent)" };
 
     private uint _pendingMods;
     private uint _pendingVk;
@@ -30,7 +30,7 @@ internal sealed class ConfigForm : Form
         _pendingMods = cfg.Hotkey.Modifiers;
         _pendingVk = cfg.Hotkey.VirtualKey;
 
-        Text = "Clipfoo Settings";
+        Text = "Capper Settings";
         FormBorderStyle = FormBorderStyle.FixedDialog;
         MaximizeBox = false;
         MinimizeBox = false;
@@ -168,14 +168,14 @@ internal sealed class ConfigForm : Form
     {
         if (string.IsNullOrWhiteSpace(_outputBox.Text))
         {
-            MessageBox.Show(this, "Please choose a folder to save clips to.", "Clipfoo",
+            MessageBox.Show(this, "Please choose a folder to save clips to.", "Capper",
                 MessageBoxButtons.OK, MessageBoxIcon.Warning);
             return;
         }
         try { Directory.CreateDirectory(_outputBox.Text); }
         catch (Exception ex)
         {
-            MessageBox.Show(this, $"That folder can't be used:\n{ex.Message}", "Clipfoo",
+            MessageBox.Show(this, $"That folder can't be used:\n{ex.Message}", "Capper",
                 MessageBoxButtons.OK, MessageBoxIcon.Warning);
             return;
         }

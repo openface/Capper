@@ -1,15 +1,15 @@
 using System.IO;
 using System.Threading;
 
-namespace Clipfoo;
+namespace Capper;
 
 /// <summary>
 /// Naming + promotion rules for a clip's lifecycle in the output folder. A recording's state is
 /// encoded in its filename so an in-progress file is never mistaken for a finished clip:
 /// <list type="bullet">
-/// <item><c>ClipFoo-&lt;date&gt;.pending.mp4</c> — recording / awaiting a trim decision</item>
-/// <item><c>ClipFoo-&lt;date&gt;.trimming.mp4</c> — being re-encoded during Save</item>
-/// <item><c>ClipFoo-&lt;date&gt;.mp4</c> — finished clip</item>
+/// <item><c>Capper-&lt;date&gt;.pending.mp4</c> — recording / awaiting a trim decision</item>
+/// <item><c>Capper-&lt;date&gt;.trimming.mp4</c> — being re-encoded during Save</item>
+/// <item><c>Capper-&lt;date&gt;.mp4</c> — finished clip</item>
 /// </list>
 /// Pure file/path logic, kept free of UI/capture dependencies so it can be unit-tested.
 /// </summary>

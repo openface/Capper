@@ -7,8 +7,8 @@
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
-    <RootNamespace>Clipfoo.Tests</RootNamespace>
-    <AssemblyName>Clipfoo.Tests</AssemblyName>
+    <RootNamespace>Capper.Tests</RootNamespace>
+    <AssemblyName>Capper.Tests</AssemblyName>
   </PropertyGroup>
 
   <!-- Test the real production code by compiling the dependency-free units directly. -->

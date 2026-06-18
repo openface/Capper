@@ -1,5 +1,5 @@
 using System.Text;
-using Clipfoo;
+using Capper;
 
 // Minimal dependency-free test runner: prints PASS/FAIL per check and exits non-zero on any failure.
 int failures = 0;
@@ -28,18 +28,18 @@ if (args.Length > 0)
     return failures;
 }
 
-string tmpRoot = Path.Combine(Path.GetTempPath(), "clipfoo-tests-" + Guid.NewGuid().ToString("N"));
+string tmpRoot = Path.Combine(Path.GetTempPath(), "capper-tests-" + Guid.NewGuid().ToString("N"));
 Directory.CreateDirectory(tmpRoot);
 
 try
 {
     // ---------------------------------------------------------------
     Console.WriteLine("ClipFiles naming");
-    string final = Path.Combine(tmpRoot, "ClipFoo-20260615-101216.mp4");
+    string final = Path.Combine(tmpRoot, "Capper-20260615-101216.mp4");
     Check("PendingPath adds .pending before extension",
-        ClipFiles.PendingPath(final) == Path.Combine(tmpRoot, "ClipFoo-20260615-101216.pending.mp4"));
+        ClipFiles.PendingPath(final) == Path.Combine(tmpRoot, "Capper-20260615-101216.pending.mp4"));
     Check("TrimmingPath adds .trimming before extension",
-        ClipFiles.TrimmingPath(final) == Path.Combine(tmpRoot, "ClipFoo-20260615-101216.trimming.mp4"));
+        ClipFiles.TrimmingPath(final) == Path.Combine(tmpRoot, "Capper-20260615-101216.trimming.mp4"));
     Check("Finished name has no state suffix",
         !Path.GetFileNameWithoutExtension(final).Contains('.'));
 

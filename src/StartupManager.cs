@@ -1,15 +1,15 @@
 using Microsoft.Win32;
 
-namespace Clipfoo;
+namespace Capper;
 
 /// <summary>
-/// Registers Clipfoo to launch at login (per-user) so it runs as a background tray agent.
+/// Registers Capper to launch at login (per-user) so it runs as a background tray agent.
 /// Uses the HKCU \Run key, which needs no admin rights.
 /// </summary>
 internal static class StartupManager
 {
     private const string RunKeyPath = @"Software\Microsoft\Windows\CurrentVersion\Run";
-    private const string ValueName = "Clipfoo";
+    private const string ValueName = "Capper";
 
     public static bool IsEnabled()
     {

@@ -1,4 +1,4 @@
-# Clipfoo
+# Capper
 
 A tiny Windows tray utility that records the **active window** to a short, share-ready MP4
 clip — built for dropping clips into Discord and similar 10 MB-limited chats.
@@ -16,7 +16,7 @@ clip — built for dropping clips into Discord and similar 10 MB-limited chats.
 
 ## Using it
 
-1. Run `Clipfoo.exe`. A circular icon appears in the system tray (near the clock).
+1. Run `Capper.exe`. A circular icon appears in the system tray (near the clock).
 2. Focus the window you want to record and press the hotkey (default **Ctrl+Alt+R**). A small
    **Now Recording** pill appears bottom-center (showing the hotkey to stop) and the tray icon
    turns red.
@@ -35,11 +35,11 @@ a finished clip:
 
 | Filename | State |
 |----------|-------|
-| `ClipFoo-<date>.pending.mp4` | Currently recording, or waiting for you to trim/keep it |
-| `ClipFoo-<date>.trimming.mp4` | Being re-encoded while you Save |
-| `ClipFoo-<date>.mp4` | Finished clip — ready to share |
+| `Capper-<date>.pending.mp4` | Currently recording, or waiting for you to trim/keep it |
+| `Capper-<date>.trimming.mp4` | Being re-encoded while you Save |
+| `Capper-<date>.mp4` | Finished clip — ready to share |
 
-**Save** and **✕ (keep)** rename the file to the finished `ClipFoo-<date>.mp4`; **Discard**
+**Save** and **✕ (keep)** rename the file to the finished `Capper-<date>.mp4`; **Discard**
 deletes it. Stray `.pending`/`.trimming` files from an interrupted session are cleaned up on the
 next launch.
 
@@ -74,11 +74,11 @@ Recording is **preset** — you just hotkey. Settings are saved in the tray's Co
   Resolution is the target *height*; the source aspect ratio is preserved and never upscaled.
 - **Audio** — capture the system mix (WASAPI loopback) on/off, plus AAC bitrate (96–192 kbps).
 - **Hotkey** — click the box and press a combo (e.g. `Ctrl+Alt+R`, or an F-key).
-- **Save clips to** — output folder (default `Videos\Clipfoo`).
-- **Run at login** — per-user startup entry so Clipfoo is always in the tray.
+- **Save clips to** — output folder (default `Videos\Capper`).
+- **Run at login** — per-user startup entry so Capper is always in the tray.
 
 There is no file-size setting — the **trim dialog** handles hitting a size after recording.
-Settings persist to `%APPDATA%\Clipfoo\config.json`.
+Settings persist to `%APPDATA%\Capper\config.json`.
 
 ## Building from source
 
@@ -88,9 +88,9 @@ Requirements: **.NET 9 SDK** (Windows). The project targets `net9.0-windows10.0.
 # Debug build / run
 dotnet run
 
-# Self-contained single-file release (one Clipfoo.exe, ~57 MB, no runtime needed)
+# Self-contained single-file release (one Capper.exe, ~57 MB, no runtime needed)
 dotnet publish -c Release
-# -> bin/Release/net9.0-windows10.0.19041.0/win-x64/publish/Clipfoo.exe
+# -> bin/Release/net9.0-windows10.0.19041.0/win-x64/publish/Capper.exe
 ```
 
 If NuGet has no source configured on a fresh machine:

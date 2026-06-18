@@ -3,7 +3,7 @@ using Vortice.Direct3D11;
 using Vortice.DXGI;            // Rational
 using Vortice.Mathematics;     // Color4
 
-namespace Clipfoo;
+namespace Capper;
 
 /// <summary>
 /// GPU-scales a captured frame down to a fixed output size using the Direct3D 11 video processor,

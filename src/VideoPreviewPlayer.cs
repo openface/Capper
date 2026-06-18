@@ -7,7 +7,7 @@ using Windows.Media.Core;
 using Windows.Media.Playback;
 using static Vortice.Direct3D11.D3D11;
 
-namespace Clipfoo;
+namespace Capper;
 
 /// <summary>
 /// Real audio + video preview of a clip, using <see cref="MediaPlayer"/> in frame-server mode.

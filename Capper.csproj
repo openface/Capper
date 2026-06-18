@@ -12,14 +12,14 @@
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <LangVersion>latest</LangVersion>
     <ApplicationManifest>app.manifest</ApplicationManifest>
-    <AssemblyName>Clipfoo</AssemblyName>
-    <RootNamespace>Clipfoo</RootNamespace>
+    <AssemblyName>Capper</AssemblyName>
+    <RootNamespace>Capper</RootNamespace>
     <Version>1.0.0</Version>
-    <Product>Clipfoo</Product>
+    <Product>Capper</Product>
     <Description>Quick active-window clip recorder for sharing.</Description>
   </PropertyGroup>
 
-  <!-- Self-contained single-file publish: produces one Clipfoo.exe with no external deps. -->
+  <!-- Self-contained single-file publish: produces one Capper.exe with no external deps. -->
   <PropertyGroup Condition="'$(Configuration)' == 'Release'">
     <SelfContained>true</SelfContained>
     <PublishSingleFile>true</PublishSingleFile>

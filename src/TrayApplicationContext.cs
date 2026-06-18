@@ -6,7 +6,7 @@ using System.Text;
 using System.Threading;
 using System.Windows.Forms;
 
-namespace Clipfoo;
+namespace Capper;
 
 /// <summary>
 /// Tray-resident app. The hotkey starts/stops recording the focused window; while recording a
@@ -53,7 +53,7 @@ internal sealed class TrayApplicationContext : ApplicationContext
         _tray = new NotifyIcon
         {
             Icon = _idleIcon,
-            Text = "Clipfoo — idle",
+            Text = "Capper — idle",
             Visible = true,
             ContextMenuStrip = menu,
         };
@@ -73,7 +73,7 @@ internal sealed class TrayApplicationContext : ApplicationContext
             if (_recorder is { IsRecording: true }) _overlay.UpdateElapsed(DateTime.Now - _recStart);
         };
 
-        Notify("Clipfoo is running",
+        Notify("Capper is running",
             $"Press {_config.Hotkey.Display} while a window is focused to start recording it; " +
             "press again to stop and trim.", ToolTipIcon.Info);
     }
@@ -100,7 +100,7 @@ internal sealed class TrayApplicationContext : ApplicationContext
                 || Native.GetWindowProcessId(fg) == Environment.ProcessId
                 || !Native.IsCapturableWindow(fg))
             {
-                Notify("Clipfoo",
+                Notify("Capper",
                     "Focus the window you want to record, then press the hotkey.", ToolTipIcon.Info);
                 return;
             }
@@ -109,12 +109,12 @@ internal sealed class TrayApplicationContext : ApplicationContext
 
         if (item == null)
         {
-            Notify("Clipfoo", "Couldn't start capture for the selected target.", ToolTipIcon.Warning);
+            Notify("Capper", "Couldn't start capture for the selected target.", ToolTipIcon.Warning);
             return;
         }
 
         // Record into a ".pending.mp4" staging file in the output folder; it's renamed to the
-        // final "ClipFoo-<date>.mp4" only once the user keeps/saves it from the trim dialog.
+        // final "Capper-<date>.mp4" only once the user keeps/saves it from the trim dialog.
         string finalPath = BuildOutputPath();
         string stagingPath = ClipFiles.PendingPath(finalPath);
         _pendingFinalPath = finalPath;
@@ -133,7 +133,7 @@ internal sealed class TrayApplicationContext : ApplicationContext
         {
             _recorder = null;
             UpdateRecordingUi(false);
-            Notify("Clipfoo — couldn't start recording", ex.Message, ToolTipIcon.Error, 6000);
+            Notify("Capper — couldn't start recording", ex.Message, ToolTipIcon.Error, 6000);
         }
     }
 
@@ -158,7 +158,7 @@ internal sealed class TrayApplicationContext : ApplicationContext
             }
             else if (!result.Success)
             {
-                Notify("Clipfoo — recording failed",
+                Notify("Capper — recording failed",
                     result.Error ?? "Unknown error", ToolTipIcon.Error, 6000);
             }
         }, null);
@@ -174,7 +174,7 @@ internal sealed class TrayApplicationContext : ApplicationContext
     private void UpdateRecordingUi(bool recording)
     {
         _tray.Icon = recording ? _recordingIcon : _idleIcon;
-        _tray.Text = recording ? "Clipfoo — recording…" : "Clipfoo — idle";
+        _tray.Text = recording ? "Capper — recording…" : "Capper — idle";
     }
 
     private void RegisterHotkey()
@@ -182,14 +182,14 @@ internal sealed class TrayApplicationContext : ApplicationContext
         _hotkeyActive = _hotkey.Register(_config.Hotkey.Modifiers, _config.Hotkey.VirtualKey);
         if (_hotkeyActive)
         {
-            if (_recorder is not { IsRecording: true }) _tray.Text = "Clipfoo — idle";
+            if (_recorder is not { IsRecording: true }) _tray.Text = "Capper — idle";
         }
         else
         {
             // Make the failure actionable: the tooltip shows it's off, and clicking the
             // balloon jumps straight to Configure to pick a free combo.
-            _tray.Text = $"Clipfoo — hotkey {_config.Hotkey.Display} unavailable";
-            Notify("Clipfoo — hotkey unavailable",
+            _tray.Text = $"Capper — hotkey {_config.Hotkey.Display} unavailable";
+            Notify("Capper — hotkey unavailable",
                 $"{_config.Hotkey.Display} is in use by another app. Click here to choose a different hotkey.",
                 ToolTipIcon.Warning, 6000, opensConfig: true);
         }
@@ -233,7 +233,7 @@ internal sealed class TrayApplicationContext : ApplicationContext
         }
         catch (Exception ex)
         {
-            Notify("Clipfoo", ex.Message, ToolTipIcon.Error);
+            Notify("Capper", ex.Message, ToolTipIcon.Error);
         }
     }
 
@@ -242,12 +242,12 @@ internal sealed class TrayApplicationContext : ApplicationContext
         string dir = string.IsNullOrWhiteSpace(_config.OutputDirectory)
             ? AppConfig.DefaultOutputDirectory() : _config.OutputDirectory;
         Directory.CreateDirectory(dir);
-        return Path.Combine(dir, $"ClipFoo-{DateTime.Now:yyyyMMdd-HHmmss}.mp4");
+        return Path.Combine(dir, $"Capper-{DateTime.Now:yyyyMMdd-HHmmss}.mp4");
     }
 
     /// <summary>At launch no trim dialog is open, so any ".pending"/".trimming" file in the
     /// output folder is a leftover from a previous session (e.g. a crash mid-recording).
-    /// Best-effort delete so only finished "ClipFoo-&lt;date&gt;.mp4" clips remain.</summary>
+    /// Best-effort delete so only finished "Capper-&lt;date&gt;.mp4" clips remain.</summary>
     private void CleanupOrphanedStaging()
     {
         try
@@ -255,8 +255,8 @@ internal sealed class TrayApplicationContext : ApplicationContext
             string dir = string.IsNullOrWhiteSpace(_config.OutputDirectory)
                 ? AppConfig.DefaultOutputDirectory() : _config.OutputDirectory;
             if (!Directory.Exists(dir)) return;
-            foreach (var f in Directory.EnumerateFiles(dir, "ClipFoo-*.pending.mp4")
-                         .Concat(Directory.EnumerateFiles(dir, "ClipFoo-*.trimming.mp4")))
+            foreach (var f in Directory.EnumerateFiles(dir, "Capper-*.pending.mp4")
+                         .Concat(Directory.EnumerateFiles(dir, "Capper-*.trimming.mp4")))
             {
                 try { File.Delete(f); } catch { }
             }

@@ -1,7 +1,7 @@
 using System.Runtime.InteropServices;
 using System.Text;
 
-namespace Clipfoo;
+namespace Capper;
 
 /// <summary>
 /// Tunes the Media Foundation H.264 encoder for better quality-per-byte via its <c>ICodecAPI</c>.

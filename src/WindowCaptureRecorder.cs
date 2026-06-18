@@ -14,7 +14,7 @@ using Windows.Graphics.DirectX;
 using Windows.Graphics.DirectX.Direct3D11;
 using static Vortice.Direct3D11.D3D11;
 
-namespace Clipfoo;
+namespace Capper;
 
 public sealed record RecordingResult(bool Success, string OutputPath, double Seconds, string? Error);
 
@@ -203,7 +203,7 @@ public sealed class WindowCaptureRecorder : IDisposable
         IsRecording = true;
         _session.StartCapture();
 
-        _encodeThread = new Thread(EncodeLoop) { IsBackground = true, Name = "Clipfoo.Encode" };
+        _encodeThread = new Thread(EncodeLoop) { IsBackground = true, Name = "Capper.Encode" };
         _encodeThread.Start();
 
         if (_audioEnabled)

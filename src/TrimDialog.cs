@@ -7,7 +7,7 @@ using Windows.Media.Editing;
 using Windows.Storage;
 using Windows.Storage.Streams;
 
-namespace Clipfoo;
+namespace Capper;
 
 /// <summary>
 /// Sleek dark "Trim &amp; Save" dialog with a scrubbable video preview and green/red trim handles.
@@ -68,7 +68,7 @@ internal sealed class TrimDialog : Form
         _finalPath = finalPath;
         _cfg = cfg;
 
-        Text = "Trim & Save — Clipfoo";
+        Text = "Trim & Save — Capper";
         FormBorderStyle = FormBorderStyle.None;
         StartPosition = FormStartPosition.CenterScreen;
         BackColor = Bg;
@@ -425,7 +425,7 @@ internal sealed class TrimDialog : Form
         catch (Exception ex)
         {
             ClipFiles.Discard(trimTemp);
-            MessageBox.Show(this, "Trim failed:\n" + ex.Message, "Clipfoo", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            MessageBox.Show(this, "Trim failed:\n" + ex.Message, "Capper", MessageBoxButtons.OK, MessageBoxIcon.Error);
             RestoreAfterTrim();
         }
         finally

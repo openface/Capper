@@ -1,7 +1,7 @@
 using System.Runtime.InteropServices;
 using System.Windows.Forms;
 
-namespace Clipfoo;
+namespace Capper;
 
 /// <summary>
 /// Hidden message-only window that owns the global hotkey registration and raises an event
