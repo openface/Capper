@@ -7,9 +7,9 @@ All notable changes to Capper are documented here. The format is based on
 ## [Unreleased]
 
 ### Added
-- **Auto-update** via [Velopack](https://velopack.io): an installer (`Capper-win-Setup.exe`) with
-  delta updates. Installed copies notify in the tray when a new version is available and apply it on
-  restart.
+- **In-app updates** via [Velopack](https://velopack.io): an installer (`Capper-win-Setup.exe`) with
+  delta updates, plus a **Check for updates…** tray menu item that installs a newer version and
+  restarts.
 
 ### Fixed
 - Recording no longer plays back **too fast toward the end**: frames are now timestamped by real

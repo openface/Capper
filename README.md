@@ -141,10 +141,10 @@ persist to `%APPDATA%\Capper\config.json`.
 
 **End users:** download `Capper-win-Setup.exe` from the
 [latest release](https://github.com/openface/Capper/releases/latest) and run it. It installs to your
-user profile (no admin needed), adds Start Menu/Desktop shortcuts, and from then on Capper
-**updates itself** — when a new version is published it shows a tray notification and a
-"Install update" menu item that applies it on restart. (The installer is currently unsigned, so
-Windows SmartScreen shows a one-time "More info → Run anyway" prompt.)
+user profile (no admin needed) and adds Start Menu/Desktop shortcuts. To update later, use
+**Check for updates…** in the tray menu — if a newer version is available, Capper shows an
+"Install update" item that downloads it and applies it on restart. (The installer is currently
+unsigned, so Windows SmartScreen shows a one-time "More info → Run anyway" prompt.)
 
 **Building from source:** requires the **.NET 9 SDK** (Windows). The project targets
 `net9.0-windows10.0.19041.0`.

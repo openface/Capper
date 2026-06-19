@@ -18,12 +18,12 @@ internal sealed class UpdateService
     /// <summary>True only when launched from a Velopack install (so updating is actually possible).</summary>
     public bool IsInstalled => _mgr.IsInstalled;
 
-    /// <summary>Returns the available update, or null if up to date / not installable. Never throws.</summary>
+    /// <summary>Returns the available update, or null if already up to date (or not an installed
+    /// build). Throws if the check itself fails (offline, rate-limited) so a manual check can say so.</summary>
     public async Task<UpdateInfo?> CheckAsync()
     {
         if (!_mgr.IsInstalled) return null;
-        try { return await _mgr.CheckForUpdatesAsync(); }
-        catch { return null; } // offline, rate-limited, etc. — silently stay on the current build
+        return await _mgr.CheckForUpdatesAsync();
     }
 
     /// <summary>Download the update and relaunch into it. Does not return on success.</summary>

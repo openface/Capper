@@ -4,7 +4,6 @@ using System.IO;
 using System.Linq;
 using System.Text;
 using System.Threading;
-using System.Threading.Tasks;
 using System.Windows.Forms;
 using Velopack;
 
@@ -36,6 +35,7 @@ internal sealed class TrayApplicationContext : ApplicationContext
     private readonly UpdateService _updates = new();
     private UpdateInfo? _pendingUpdate;
     private ToolStripMenuItem? _updateMenuItem;
+    private readonly ToolStripMenuItem _checkUpdatesItem;
     private bool _balloonInstallsUpdate;
 
     public TrayApplicationContext()
@@ -54,6 +54,8 @@ internal sealed class TrayApplicationContext : ApplicationContext
         var menu = new ContextMenuStrip();
         menu.Items.Add(new ToolStripMenuItem("Configure…", null, (_, _) => OpenConfig()));
         menu.Items.Add(new ToolStripMenuItem("Open Output Folder", null, (_, _) => OpenOutputFolder()));
+        _checkUpdatesItem = new ToolStripMenuItem("Check for updates…", null, (_, _) => CheckForUpdatesManually());
+        menu.Items.Add(_checkUpdatesItem);
         menu.Items.Add(new ToolStripSeparator());
         menu.Items.Add(new ToolStripMenuItem("Quit", null, (_, _) => Quit()));
 
@@ -88,16 +90,39 @@ internal sealed class TrayApplicationContext : ApplicationContext
         Notify("Capper is running",
             $"Press {_config.Hotkey.Display} while a window is focused to start recording it; " +
             "press again to stop and trim.", ToolTipIcon.Info);
-
-        _ = CheckForUpdatesAsync(); // background; no-op unless installed via Velopack
     }
 
-    // --- Auto-update (Velopack) ---
+    // --- Updates (Velopack) ---
 
-    private async Task CheckForUpdatesAsync()
+    /// <summary>Tray "Check for updates…": runs an on-demand check and always gives feedback
+    /// (found / up to date / couldn't check). The continuation resumes on the UI thread.</summary>
+    private async void CheckForUpdatesManually()
     {
-        var info = await _updates.CheckAsync();
-        if (info != null) _ui.Post(_ => OnUpdateAvailable(info), null);
+        string original = _checkUpdatesItem.Text ?? "Check for updates…";
+        _checkUpdatesItem.Enabled = false;
+        _checkUpdatesItem.Text = "Checking for updates…";
+        try
+        {
+            if (!_updates.IsInstalled)
+            {
+                Notify("Capper",
+                    "In-app updates are only available when Capper is installed via its installer.",
+                    ToolTipIcon.Info);
+                return;
+            }
+            var info = await _updates.CheckAsync();
+            if (info != null) OnUpdateAvailable(info);
+            else Notify("Capper is up to date", "You're running the latest version.", ToolTipIcon.Info);
+        }
+        catch (Exception ex)
+        {
+            Notify("Capper — couldn't check for updates", ex.Message, ToolTipIcon.Warning);
+        }
+        finally
+        {
+            _checkUpdatesItem.Text = original;
+            _checkUpdatesItem.Enabled = true;
+        }
     }
 
     /// <summary>An update is ready: surface it without interrupting. The user installs on their own
