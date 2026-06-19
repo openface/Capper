@@ -464,6 +464,7 @@ public sealed class WindowCaptureRecorder : IDisposable
         var local = new byte[_frameBuffer.Length];
         var sw = Stopwatch.StartNew();
         long idx = 0;
+        long lastTimeHns = -1;
         string? error = null;
 
         try
@@ -478,9 +479,19 @@ public sealed class WindowCaptureRecorder : IDisposable
                 buffer.Unlock();
                 buffer.CurrentLength = local.Length;
 
+                // Stamp the frame with the actual elapsed wall-clock time, not idx*(1/fps). If the
+                // encoder can't sustain the target fps, WriteSample blocks and the loop emits fewer
+                // frames per real second; a frame-counter timestamp would then pack those frames
+                // closer together and play the clip back too fast ("rushed", worst near the end where
+                // the encoder has fallen furthest behind). Real-clock timestamps keep playback at true
+                // speed — the stream just dips to a lower effective fps under load instead.
+                long timeHns = sw.Elapsed.Ticks; // TimeSpan ticks are 100 ns == hns
+                if (timeHns <= lastTimeHns) timeHns = lastTimeHns + 1; // MF needs strictly increasing times
+                lastTimeHns = timeHns;
+
                 var sample = MediaFactory.MFCreateSample();
                 sample.AddBuffer(buffer);
-                sample.SampleTime = idx * durationHns;
+                sample.SampleTime = timeHns;
                 sample.SampleDuration = durationHns;
                 lock (_writerLock)
                 {
@@ -491,7 +502,8 @@ public sealed class WindowCaptureRecorder : IDisposable
 
                 idx++;
 
-                // Pace to wall-clock so the file plays back at real speed.
+                // Pace to wall-clock so we aim for ~fps frames per second (the sleep is skipped when
+                // we've already fallen behind, letting the loop catch back up).
                 double nextMs = idx * 1000.0 / _fps;
                 int sleep = (int)(nextMs - sw.Elapsed.TotalMilliseconds);
                 if (sleep > 1) Thread.Sleep(sleep);
@@ -502,7 +514,7 @@ public sealed class WindowCaptureRecorder : IDisposable
             error = ex.Message;
         }
 
-        _recordedSeconds = idx / (double)_fps;
+        _recordedSeconds = lastTimeHns > 0 ? (lastTimeHns + durationHns) / 10_000_000.0 : 0;
         FinishInternal(error);
     }
 

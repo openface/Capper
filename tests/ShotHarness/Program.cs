@@ -31,6 +31,8 @@ internal static class ShotProgram
         Directory.CreateDirectory(outDir);
 
         if (mode == "trim") { CaptureTrim(outDir, args.Length > 2 ? args[2] : null); return; }
+        if (mode == "probe") { Probe(args.Length > 2 ? args[2] : null); return; }
+        if (mode == "record") { RecordSample(outDir, args.Length > 2 ? int.Parse(args[2]) : 5); return; }
 
         // Settings window — default config (system audio on, so the checkbox shows checked).
         using (var f = new ConfigForm(new AppConfig()))
@@ -99,6 +101,80 @@ internal static class ShotProgram
 
         ClipFiles.Discard(staging);
         ClipFiles.Discard(finalPath);
+    }
+
+    // Record the animated sample window for a fixed number of seconds, then report the video stream's
+    // duration. With correct timestamps, video end should be ~= the wall-clock record time.
+    private static void RecordSample(string outDir, int seconds)
+    {
+        var cfg = new AppConfig();
+        cfg.ApplyPreset(VideoPreset.QuickShare);
+        cfg.AudioSource = AudioSource.None;
+        string outPath = Path.Combine(outDir, $"record-test-{seconds}s.mp4");
+        ClipFiles.Discard(outPath);
+
+        using var sample = new SampleForm(Path.Combine(outDir, "logo.png"));
+        sample.Show();
+        Pump(500);
+        var item = Native.CreateItemForWindow(sample.Handle);
+        if (item == null) { Console.WriteLine("ERROR: could not create capture item"); return; }
+
+        var rec = new WindowCaptureRecorder();
+        var wall = System.Diagnostics.Stopwatch.StartNew();
+        rec.Start(item, cfg, outPath);
+        Pump(seconds * 1000);
+        rec.Stop();
+        wall.Stop();
+        Pump(300);
+        rec.Dispose();
+        sample.Close();
+
+        Console.WriteLine($"wall-clock record time: {wall.Elapsed.TotalSeconds:0.000}s");
+        Probe(outPath);
+    }
+
+    // Read each stream to its end via Media Foundation and report the last presentation time, to check
+    // whether the audio track ends meaningfully before/after the video (which makes the frame-server
+    // preview lose its clock and "rush" the tail of the clip).
+    private static void Probe(string? clip)
+    {
+        if (clip == null || !File.Exists(clip)) { Console.WriteLine("usage: probe <clip.mp4>"); return; }
+        Vortice.MediaFoundation.MediaFactory.MFStartup(false).CheckError();
+        try
+        {
+            var reader = Vortice.MediaFoundation.MediaFactory.MFCreateSourceReaderFromURL(clip, null);
+            ProbeStream(reader, Vortice.MediaFoundation.SourceReaderIndex.FirstVideoStream, "video");
+            ProbeStream(reader, Vortice.MediaFoundation.SourceReaderIndex.FirstAudioStream, "audio");
+            reader.Dispose();
+        }
+        finally { Vortice.MediaFoundation.MediaFactory.MFShutdown(); }
+    }
+
+    private static void ProbeStream(Vortice.MediaFoundation.IMFSourceReader reader,
+        Vortice.MediaFoundation.SourceReaderIndex stream, string label)
+    {
+        long lastEndHns = -1, firstHns = -1, count = 0;
+        while (true)
+        {
+            Vortice.MediaFoundation.IMFSample? sample;
+            Vortice.MediaFoundation.SourceReaderFlag flags;
+            long ts;
+            try
+            {
+                sample = reader.ReadSample(stream, Vortice.MediaFoundation.SourceReaderControlFlag.None,
+                    out _, out flags, out ts);
+            }
+            catch (SharpGen.Runtime.SharpGenException) { Console.WriteLine($"{label}: (no such stream)"); return; }
+            if ((flags & Vortice.MediaFoundation.SourceReaderFlag.EndOfStream) != 0) { sample?.Dispose(); break; }
+            if (sample == null) continue;
+            long dur = 0; try { dur = sample.SampleDuration; } catch { }
+            if (firstHns < 0) firstHns = ts;
+            lastEndHns = ts + dur;
+            count++;
+            sample.Dispose();
+        }
+        if (count == 0) { Console.WriteLine($"{label}: (no samples)"); return; }
+        Console.WriteLine($"{label}: {count} samples, first={firstHns / 10_000_000.0:0.000}s, end={lastEndHns / 10_000_000.0:0.000}s");
     }
 
     private static void Save(IntPtr hwnd, string path)

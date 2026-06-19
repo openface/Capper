@@ -21,6 +21,7 @@ internal sealed class VideoPreviewPlayer : IDisposable
     private ID3D11Texture2D? _staging;  // CPU-readable copy
     private IDirect3DSurface? _surface;
     private readonly int _w, _h;
+    private byte[]? _frameBuffer; // reused across frames to avoid per-frame LOH churn
     private readonly object _gate = new();
     private volatile bool _disposed;
 
@@ -94,9 +95,11 @@ internal sealed class VideoPreviewPlayer : IDisposable
                 sender.CopyFrameToVideoSurface(_surface);                  // scales the frame to _w x _h
                 _ctx.CopyResource(_staging, _rt);
 
-                var buf = new byte[_h * _w * 4];
-                Direct3DHelpers.ReadStagingRows(_ctx, _staging, _w, _h, buf);
-                FrameReady?.Invoke(buf, _w, _h);
+                // Reuse one buffer: FrameReady consumers copy it synchronously before returning, and
+                // frames are serialized by _gate, so a per-frame allocation here is pure GC pressure.
+                _frameBuffer ??= new byte[_h * _w * 4];
+                Direct3DHelpers.ReadStagingRows(_ctx, _staging, _w, _h, _frameBuffer);
+                FrameReady?.Invoke(_frameBuffer, _w, _h);
             }
         }
         catch

@@ -53,6 +53,12 @@ internal sealed class TrimDialog : Form
     private TimeSpan? _pendingPreview;
     private bool _previewBusy;
 
+    // Two reusable bitmaps swapped during playback (one shown, one written) plus a guard that drops
+    // frames while a paint is still in flight — together these keep the per-frame allocations (and the
+    // GC pauses that made playback stutter) out of the hot path.
+    private Bitmap? _shownFrame, _backFrame;
+    private int _paintPending;
+
     private readonly System.Windows.Forms.Timer _playTimer = new() { Interval = 66 };
     private readonly System.Diagnostics.Stopwatch _playClock = new();
     private double _playFrom;
@@ -181,8 +187,11 @@ internal sealed class TrimDialog : Form
             _sourceVideoBps = (long)vp.Bitrate;
             if (vp.Width > 0 && vp.Height > 0)
             {
-                _thumbW = 480;
-                _thumbH = Math.Max(2, (int)Math.Round(480.0 * vp.Height / vp.Width));
+                // Decode/copy frames at the preview box's actual pixel width so playback isn't softened
+                // by an upscale (the old fixed 480px was narrower than the ~584px box). Never exceed the
+                // source width — decoding more pixels than exist is wasted work, not extra detail.
+                _thumbW = Math.Min((int)vp.Width, Math.Max(2, _preview.Width));
+                _thumbH = Math.Max(2, (int)Math.Round((double)_thumbW * vp.Height / vp.Width));
             }
             _comp = new MediaComposition();
             _comp.Clips.Add(clip);
@@ -222,7 +231,7 @@ internal sealed class TrimDialog : Form
                 {
                     IRandomAccessStream ras = await _comp.GetThumbnailAsync(want, _thumbW, _thumbH, VideoFramePrecision.NearestFrame);
                     var bmp = await ToBitmap(ras);
-                    if (!IsDisposed) { var old = _preview.Image; _preview.Image = bmp; old?.Dispose(); }
+                    if (!IsDisposed) { var old = _preview.Image; _preview.Image = bmp; if (!IsFrameBuffer(old)) old?.Dispose(); }
                     else bmp.Dispose();
                 }
                 catch { /* a frame fetch can fail near the very end; ignore */ }
@@ -257,14 +266,24 @@ internal sealed class TrimDialog : Form
         }
     }
 
-    /// <summary>Background-thread callback with a BGRA frame: turn it into a bitmap and show it.</summary>
+    /// <summary>Background-thread callback with a BGRA frame: write it into the spare bitmap and
+    /// show it. Frames that arrive while the previous one is still being painted are dropped, so a
+    /// slow UI thread can't build a backlog that replays in stuttery bursts.</summary>
     private void OnVideoFrame(byte[] bgra, int w, int h)
     {
         if (!_playing) return;
+        if (System.Threading.Interlocked.Exchange(ref _paintPending, 1) == 1) return;
+
         Bitmap bmp;
         try
         {
-            bmp = new Bitmap(w, h, System.Drawing.Imaging.PixelFormat.Format32bppArgb);
+            bmp = _backFrame ?? new Bitmap(w, h, System.Drawing.Imaging.PixelFormat.Format32bppArgb);
+            if (bmp.Width != w || bmp.Height != h)
+            {
+                bmp.Dispose();
+                bmp = new Bitmap(w, h, System.Drawing.Imaging.PixelFormat.Format32bppArgb);
+            }
+            _backFrame = bmp;
             var bd = bmp.LockBits(new Rectangle(0, 0, w, h),
                 System.Drawing.Imaging.ImageLockMode.WriteOnly, System.Drawing.Imaging.PixelFormat.Format32bppArgb);
             try
@@ -275,17 +294,39 @@ internal sealed class TrimDialog : Form
             }
             finally { bmp.UnlockBits(bd); }
         }
-        catch { return; }
+        catch { System.Threading.Interlocked.Exchange(ref _paintPending, 0); return; }
 
         try
         {
             BeginInvoke(() =>
             {
-                if (IsDisposed || !_playing) { bmp.Dispose(); return; }
-                var old = _preview.Image; _preview.Image = bmp; old?.Dispose();
+                if (!IsDisposed && _playing)
+                {
+                    var prev = _preview.Image;
+                    _preview.Image = bmp;
+                    if (!IsFrameBuffer(prev)) prev?.Dispose(); // a stray scrub thumbnail, not a reusable buffer
+                    _backFrame = _shownFrame; // recycle last frame's bitmap as the next write target
+                    _shownFrame = bmp;
+                }
+                System.Threading.Interlocked.Exchange(ref _paintPending, 0);
             });
         }
-        catch { bmp.Dispose(); } // handle not created / form closing
+        catch { System.Threading.Interlocked.Exchange(ref _paintPending, 0); } // handle not created / form closing
+    }
+
+    private bool IsFrameBuffer(Image? img) =>
+        img != null && (ReferenceEquals(img, _shownFrame) || ReferenceEquals(img, _backFrame));
+
+    /// <summary>Tear down the current preview image and both reusable playback buffers, avoiding the
+    /// double-dispose that would happen when the shown image is one of those buffers.</summary>
+    private void DisposePreviewImages()
+    {
+        var current = _preview.Image;
+        _preview.Image = null;
+        if (!IsFrameBuffer(current)) current?.Dispose();
+        _shownFrame?.Dispose(); _shownFrame = null;
+        _backFrame?.Dispose(); _backFrame = null;
+        _paintPending = 0;
     }
 
     // --- Playback ---
@@ -466,8 +507,7 @@ internal sealed class TrimDialog : Form
         _video?.Dispose();
         _video = null;
         _comp = null;
-        _preview.Image?.Dispose();
-        _preview.Image = null;
+        DisposePreviewImages();
         GC.Collect(); GC.WaitForPendingFinalizers();
     }
 
@@ -493,7 +533,7 @@ internal sealed class TrimDialog : Form
         }
         _video?.Dispose(); // safety net for the Saved/Discarded paths
         _video = null;
-        _preview.Image?.Dispose();
+        DisposePreviewImages();
         base.OnFormClosed(e);
     }
 
