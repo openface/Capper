@@ -1,0 +1,26 @@
+name: CI
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+    branches: [master]
+
+jobs:
+  build-test:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '9.0.x'
+
+      # Headless unit tests (clip-file naming, config + preset migration, MP4 fast-start).
+      # The runner exits non-zero on any failed check, so a failure fails the job.
+      - name: Test
+        run: dotnet run --project tests/Capper.Tests/Capper.Tests.csproj -c Release
+
+      # Compile the app to catch build breaks (the Windows-only UI/capture code).
+      - name: Build
+        run: dotnet build Capper.csproj -c Release
