@@ -138,8 +138,16 @@ internal sealed class ConfigForm : Form
 
     private void Hint(string text, int x, ref int y)
     {
-        Controls.Add(new Label { Text = text, Left = x, Top = y, AutoSize = true, ForeColor = Theme.Muted, Font = new Font("Segoe UI", 8f) });
-        y += 16;
+        // Wrap within the window width (and grow the row) so long hints don't truncate at the edge.
+        int width = ClientSize.Width - x * 2;
+        var font = new Font("Segoe UI", 8f);
+        int height = TextRenderer.MeasureText(text, font, new Size(width, int.MaxValue), TextFormatFlags.WordBreak).Height;
+        Controls.Add(new Label
+        {
+            Text = text, Left = x, Top = y, AutoSize = false, Width = width, Height = height,
+            ForeColor = Theme.Muted, Font = font,
+        });
+        y += height + 2;
     }
 
     // --- Dark control styling ---
