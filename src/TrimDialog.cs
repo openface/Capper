@@ -10,19 +10,19 @@ using Windows.Storage.Streams;
 namespace Capper;
 
 /// <summary>
-/// Sleek dark "Trim &amp; Save" dialog with a scrubbable video preview and green/red trim handles.
+/// Sleek dark "Trim and Save Clip" dialog with a scrubbable video preview and green/red trim handles.
 /// The user trims to the length they want; the selected range is re-encoded (VBR, preserving the
 /// recorded quality) via <see cref="TrimEngine"/>. Frame preview uses MediaComposition thumbnails.
 /// </summary>
 internal sealed class TrimDialog : Form
 {
-    private static readonly Color Bg = Color.FromArgb(28, 29, 33);
-    private static readonly Color HeaderColor = Color.FromArgb(36, 38, 44);
-    private static readonly Color Fg = Color.FromArgb(238, 239, 242);
-    private static readonly Color Muted = Color.FromArgb(150, 153, 160);
-    private static readonly Color Accent = Color.FromArgb(232, 72, 72);
-    private static readonly Color AccentHover = Color.FromArgb(244, 96, 96);
-    private static readonly Color Chip = Color.FromArgb(52, 54, 61);
+    private static readonly Color Bg = Theme.Bg;
+    private static readonly Color HeaderColor = Theme.Surface;
+    private static readonly Color Fg = Theme.Fg;
+    private static readonly Color Muted = Theme.Muted;
+    private static readonly Color Accent = Theme.Accent;
+    private static readonly Color AccentHover = Theme.AccentHover;
+    private static readonly Color Chip = Theme.Chip;
 
     private readonly string _path;       // staging file the recorder wrote to
     private readonly string _finalPath;  // where the kept clip lands in the output folder
@@ -68,7 +68,7 @@ internal sealed class TrimDialog : Form
         _finalPath = finalPath;
         _cfg = cfg;
 
-        Text = "Trim & Save — Capper";
+        Text = "Trim and Save Clip — Capper";
         FormBorderStyle = FormBorderStyle.None;
         StartPosition = FormStartPosition.CenterScreen;
         BackColor = Bg;
@@ -104,7 +104,7 @@ internal sealed class TrimDialog : Form
         _title.SetBounds(pad, 14, w - 40, 22);
         _title.ForeColor = Fg; _title.BackColor = Color.Transparent;
         _title.Font = new Font("Segoe UI Semibold", 10f);
-        _title.Text = "Trim & Save";
+        _title.Text = "Trim and Save Clip";
         _title.MouseDown += Header_MouseDown; _title.MouseMove += Header_MouseMove; _title.MouseUp += Header_MouseUp;
         var close = new LinkLabel { Text = "✕", AutoSize = true, LinkColor = Muted, ActiveLinkColor = Fg, LinkBehavior = LinkBehavior.NeverUnderline, BackColor = Color.Transparent, Cursor = Cursors.Hand, Font = new Font("Segoe UI", 11f) };
         close.Location = new Point(ClientSize.Width - close.PreferredWidth - 14, 12);
@@ -188,7 +188,7 @@ internal sealed class TrimDialog : Form
             _comp.Clips.Add(clip);
             CreateVideoPlayer();
 
-            _title.Text = "Trim & Save";
+            _title.Text = "Trim and Save Clip";
 
             _timeline.Duration = _duration;
             _timeline.Start = 0;

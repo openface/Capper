@@ -14,6 +14,7 @@
     <ApplicationManifest>app.manifest</ApplicationManifest>
     <AssemblyName>Capper</AssemblyName>
     <RootNamespace>Capper</RootNamespace>
+    <ApplicationIcon>Capper.ico</ApplicationIcon>
     <Version>1.0.0</Version>
     <Product>Capper</Product>
     <Description>Quick active-window clip recorder for sharing.</Description>
@@ -30,6 +31,13 @@
   <!-- The test project lives under the repo; keep its sources out of the app build. -->
   <ItemGroup>
     <Compile Remove="tests/**/*.cs" />
+  </ItemGroup>
+
+  <!-- Embed the app icon so the tray (NotifyIcon) shows the same multi-size icon as the exe. -->
+  <ItemGroup>
+    <EmbeddedResource Include="Capper.ico">
+      <LogicalName>Capper.ico</LogicalName>
+    </EmbeddedResource>
   </ItemGroup>
 
   <ItemGroup>

@@ -1,46 +1,21 @@
 using System.Drawing;
-using System.Drawing.Drawing2D;
-using System.Runtime.InteropServices;
+using System.Reflection;
+using System.Windows.Forms;
 
 namespace Capper;
 
-/// <summary>Generates the tray icons at runtime so no .ico asset needs to ship.</summary>
+/// <summary>Loads the tray icon from the embedded multi-size <c>Capper.ico</c>, so the tray matches
+/// the app's exe icon and stays crisp at any DPI. The same icon is shown idle and while recording.</summary>
 internal static class TrayIcons
 {
-    [DllImport("user32.dll")]
-    private static extern bool DestroyIcon(IntPtr handle);
-
+    /// <param name="recording">Unused — idle and recording share one icon; the recording state is
+    /// signalled by the overlay pill and the tray tooltip instead.</param>
     public static Icon Create(bool recording)
     {
-        using var bmp = new Bitmap(32, 32);
-        using (var g = Graphics.FromImage(bmp))
-        {
-            g.SmoothingMode = SmoothingMode.AntiAlias;
-            g.Clear(Color.Transparent);
-
-            var ring = recording ? Color.FromArgb(220, 60, 60) : Color.FromArgb(72, 132, 204);
-            using var ringBrush = new SolidBrush(ring);
-            g.FillEllipse(ringBrush, 3, 3, 26, 26);
-
-            using var inner = new SolidBrush(Color.White);
-            g.FillEllipse(inner, 9, 9, 14, 14);
-
-            if (recording)
-            {
-                using var dot = new SolidBrush(Color.FromArgb(220, 60, 60));
-                g.FillEllipse(dot, 11, 11, 10, 10);
-            }
-        }
-
-        IntPtr h = bmp.GetHicon();
-        try
-        {
-            using var tmp = Icon.FromHandle(h);
-            return (Icon)tmp.Clone();
-        }
-        finally
-        {
-            DestroyIcon(h);
-        }
+        var asm = Assembly.GetExecutingAssembly();
+        using var stream = asm.GetManifestResourceStream("Capper.ico")
+            ?? throw new InvalidOperationException("Embedded resource 'Capper.ico' was not found.");
+        // Pick the frame closest to the current small-icon size for a crisp tray render.
+        return new Icon(stream, SystemInformation.SmallIconSize);
     }
 }

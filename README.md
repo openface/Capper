@@ -21,7 +21,7 @@ clip — built for dropping clips into Discord and similar 10 MB-limited chats.
    **Now Recording** pill appears bottom-center (showing the hotkey to stop) and the tray icon
    turns red.
 3. Press the hotkey again (or click the pill) to finish.
-4. The dark **Trim & Save** dialog opens with a **video preview**:
+4. The dark **Trim and Save Clip** dialog opens with a **video preview**:
    - Press **play** for real **video + audio** playback (bounded to your selected range); scrub the
      timeline or use the **frame-step** buttons to land on exact in/out points.
    - Drag the **green (start)** and **red (end)** handles to keep just the part you want — the

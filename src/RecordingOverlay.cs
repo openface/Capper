@@ -20,15 +20,18 @@ internal sealed class RecordingOverlay : Form
     private static extern bool ShowWindow(IntPtr hWnd, int nCmdShow);
     private const int SW_SHOWNOACTIVATE = 4;
 
-    private static readonly Color Bg = Color.FromArgb(24, 25, 28);
-    private static readonly Color Fg = Color.FromArgb(238, 239, 242);
-    private static readonly Color Muted = Color.FromArgb(150, 153, 160);
-    private static readonly Color Accent = Color.FromArgb(232, 72, 72);
+    private static readonly Color Bg = Theme.Bg;
+    private static readonly Color Fg = Theme.Fg;
+    private static readonly Color Muted = Theme.Muted;
+    private static readonly Color Accent = Theme.Accent;
 
     public event Action? StopRequested;
 
     private readonly Label _title;
     private readonly Label _hint;
+    // Slow pulse on the record dot — the universal "recording" cue.
+    private readonly System.Windows.Forms.Timer _pulse = new() { Interval = 33 };
+    private double _pulsePhase;
     private TimeSpan _elapsed;
     private string _stopHotkey = "";
 
@@ -66,6 +69,12 @@ internal sealed class RecordingOverlay : Form
         Click += (_, _) => StopRequested?.Invoke();
         Controls.Add(_title);
         Controls.Add(_hint);
+
+        _pulse.Tick += (_, _) =>
+        {
+            _pulsePhase += 0.16;
+            Invalidate(new Rectangle(8, 15, 24, 24)); // just the dot + glow area
+        };
     }
 
     protected override bool ShowWithoutActivation => true;
@@ -90,7 +99,16 @@ internal sealed class RecordingOverlay : Form
     {
         base.OnPaint(e);
         e.Graphics.SmoothingMode = SmoothingMode.AntiAlias;
-        using var dot = new SolidBrush(Accent);
+
+        // t sweeps 0..1..0; the dot brightens and a soft halo breathes outward.
+        double t = (Math.Sin(_pulsePhase) + 1) / 2;
+        const float cx = 20, cy = 27; // center of the 12px dot at (14,21)
+
+        float halo = 12 + 8 * (float)t;
+        using (var glow = new SolidBrush(Color.FromArgb((int)(70 * (1 - t)), Accent)))
+            e.Graphics.FillEllipse(glow, cx - halo / 2, cy - halo / 2, halo, halo);
+
+        using var dot = new SolidBrush(Color.FromArgb(150 + (int)(105 * t), Accent));
         e.Graphics.FillEllipse(dot, 14, 21, 12, 12);
     }
 
@@ -107,6 +125,7 @@ internal sealed class RecordingOverlay : Form
         Reposition();
         TopMost = true;
         BringToFront();
+        _pulse.Start();
     }
 
     private void Reposition()
@@ -121,5 +140,15 @@ internal sealed class RecordingOverlay : Form
         _title.Text = $"Now Recording   ·   {(int)elapsed.TotalMinutes}:{elapsed.Seconds:00}";
     }
 
-    public void HideOverlay() => Hide();
+    public void HideOverlay()
+    {
+        _pulse.Stop();
+        Hide();
+    }
+
+    protected override void Dispose(bool disposing)
+    {
+        if (disposing) _pulse.Dispose();
+        base.Dispose(disposing);
+    }
 }

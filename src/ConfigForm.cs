@@ -1,4 +1,5 @@
 using System.Drawing;
+using System.Drawing.Drawing2D;
 using System.IO;
 using System.Windows.Forms;
 
@@ -16,10 +17,10 @@ internal sealed class ConfigForm : Form
     private readonly TextBox _hotkeyBox = new() { ReadOnly = true };
     private readonly ComboBox _captureMode = new() { DropDownStyle = ComboBoxStyle.DropDownList };
     private readonly ComboBox _preset = new() { DropDownStyle = ComboBoxStyle.DropDownList };
-    private readonly Label _presetHint = new() { ForeColor = Color.Gray, Font = new Font("Segoe UI", 8f), AutoSize = false };
-    private readonly CheckBox _captureAudio = new() { Text = "Capture system audio (what you hear)" };
+    private readonly Label _presetHint = new() { ForeColor = Theme.Muted, Font = new Font("Segoe UI", 8f), AutoSize = false };
+    private readonly CheckBox _captureAudio = new DarkCheckBox { Text = "Capture system audio (what you hear)" };
     private readonly ComboBox _audioKbps = new() { DropDownStyle = ComboBoxStyle.DropDownList };
-    private readonly CheckBox _runAtStartup = new() { Text = "Run Capper at login (background tray agent)" };
+    private readonly CheckBox _runAtStartup = new DarkCheckBox { Text = "Run Capper at login (background tray agent)" };
 
     private uint _pendingMods;
     private uint _pendingVk;
@@ -37,9 +38,17 @@ internal sealed class ConfigForm : Form
         StartPosition = FormStartPosition.CenterScreen;
         ClientSize = new Size(440, 400);
         Font = new Font("Segoe UI", 9f);
+        BackColor = Theme.Bg;
+        ForeColor = Theme.Fg;
 
         BuildLayout();
         LoadFromConfig();
+    }
+
+    protected override void OnHandleCreated(EventArgs e)
+    {
+        base.OnHandleCreated(e);
+        Theme.UseDarkTitleBar(Handle); // dark native title bar to match the dark client area
     }
 
     private void BuildLayout()
@@ -50,6 +59,7 @@ internal sealed class ConfigForm : Form
         _captureMode.Items.Add("Active window (the focused window)");
         _captureMode.Items.Add("Full screen (the whole monitor)");
         _captureMode.SetBounds(pad, y, w, 24);
+        StyleCombo(_captureMode);
         Controls.Add(_captureMode);
         y += 26;
         Hint("Active window stays glued to the window you start on. Full screen records the monitor it's on.", pad, ref y);
@@ -59,6 +69,7 @@ internal sealed class ConfigForm : Form
         foreach (VideoPreset p in Enum.GetValues<VideoPreset>()) _preset.Items.Add(AppConfig.PresetLabel(p));
         _preset.SetBounds(pad, y, w, 24);
         _preset.SelectedIndexChanged += (_, _) => UpdatePresetHint();
+        StyleCombo(_preset);
         Controls.Add(_preset);
         y += 26;
         _presetHint.SetBounds(pad, y, w, 16);
@@ -71,16 +82,19 @@ internal sealed class ConfigForm : Form
         var akLabel = new Label { Text = "Bitrate", Left = pad + 270, Top = y + 3, AutoSize = true };
         foreach (var a in AudioKbpsValues) _audioKbps.Items.Add($"{a} kbps");
         _audioKbps.SetBounds(pad + 322, y, 82, 24);
+        StyleCombo(_audioKbps);
         Controls.Add(_captureAudio); Controls.Add(akLabel); Controls.Add(_audioKbps);
         y += 40;
 
         Section("Start / stop hotkey", pad, ref y);
         _hotkeyBox.SetBounds(pad, y, w - 90, 24);
+        StyleTextBox(_hotkeyBox);
         _hotkeyBox.KeyDown += HotkeyBox_KeyDown;
-        _hotkeyBox.Enter += (_, _) => _hotkeyBox.BackColor = Color.LightYellow;
-        _hotkeyBox.Leave += (_, _) => _hotkeyBox.BackColor = SystemColors.Window;
+        _hotkeyBox.Enter += (_, _) => _hotkeyBox.BackColor = Theme.ChipHover; // listening for a combo
+        _hotkeyBox.Leave += (_, _) => _hotkeyBox.BackColor = Theme.Surface;
         var setBtn = new Button { Text = "Set", Left = pad + w - 82, Top = y - 1, Width = 82, Height = 26 };
         setBtn.Click += (_, _) => _hotkeyBox.Focus();
+        StyleButton(setBtn);
         Controls.Add(_hotkeyBox); Controls.Add(setBtn);
         y += 26;
         Hint("Click the box and press a combo (e.g. Ctrl+Alt+R, or an F-key).", pad, ref y);
@@ -88,8 +102,10 @@ internal sealed class ConfigForm : Form
 
         Section("Save clips to", pad, ref y);
         _outputBox.SetBounds(pad, y, w - 90, 24);
+        StyleTextBox(_outputBox);
         var browse = new Button { Text = "Browse…", Left = pad + w - 82, Top = y - 1, Width = 82, Height = 26 };
         browse.Click += (_, _) => BrowseFolder();
+        StyleButton(browse);
         Controls.Add(_outputBox); Controls.Add(browse);
         y += 38;
 
@@ -101,6 +117,7 @@ internal sealed class ConfigForm : Form
         save.Click += (_, _) => Save_Click();
         var cancel = new Button { Text = "Cancel", Width = 90, Height = 30, Left = ClientSize.Width - pad - 90, Top = y };
         cancel.Click += (_, _) => Close();
+        StyleButton(save, accent: true); StyleButton(cancel);
         AcceptButton = save; CancelButton = cancel;
         Controls.Add(save); Controls.Add(cancel);
 
@@ -121,8 +138,49 @@ internal sealed class ConfigForm : Form
 
     private void Hint(string text, int x, ref int y)
     {
-        Controls.Add(new Label { Text = text, Left = x, Top = y, AutoSize = true, ForeColor = Color.Gray, Font = new Font("Segoe UI", 8f) });
+        Controls.Add(new Label { Text = text, Left = x, Top = y, AutoSize = true, ForeColor = Theme.Muted, Font = new Font("Segoe UI", 8f) });
         y += 16;
+    }
+
+    // --- Dark control styling ---
+
+    private static void StyleTextBox(TextBox t)
+    {
+        t.BorderStyle = BorderStyle.FixedSingle;
+        t.BackColor = Theme.Surface;
+        t.ForeColor = Theme.Fg;
+    }
+
+    private static void StyleButton(Button b, bool accent = false)
+    {
+        b.FlatStyle = FlatStyle.Flat;
+        b.UseVisualStyleBackColor = false;
+        b.ForeColor = accent ? Color.White : Theme.Fg;
+        b.BackColor = accent ? Theme.Accent : Theme.Chip;
+        b.FlatAppearance.BorderSize = 0;
+        b.FlatAppearance.MouseOverBackColor = accent ? Theme.AccentHover : Theme.ChipHover;
+        b.FlatAppearance.MouseDownBackColor = accent ? Theme.AccentHover : Theme.ChipHover;
+        b.Cursor = Cursors.Hand;
+    }
+
+    // ComboBox honors BackColor/ForeColor on the closed box but not the drop-down list, so owner-draw
+    // both to keep the popup dark too.
+    private static void StyleCombo(ComboBox c)
+    {
+        c.FlatStyle = FlatStyle.Flat;
+        c.BackColor = Theme.Surface;
+        c.ForeColor = Theme.Fg;
+        c.DrawMode = DrawMode.OwnerDrawFixed;
+        c.DrawItem += (s, e) =>
+        {
+            if (e.Index < 0) return;
+            bool sel = (e.State & DrawItemState.Selected) != 0;
+            using (var bg = new SolidBrush(sel ? Theme.ChipHover : Theme.Surface))
+                e.Graphics.FillRectangle(bg, e.Bounds);
+            var combo = (ComboBox)s!;
+            TextRenderer.DrawText(e.Graphics, combo.Items[e.Index]?.ToString() ?? "", combo.Font, e.Bounds,
+                Theme.Fg, TextFormatFlags.Left | TextFormatFlags.VerticalCenter);
+        };
     }
 
     private void LoadFromConfig()
@@ -191,5 +249,58 @@ internal sealed class ConfigForm : Form
 
         Saved?.Invoke(_cfg);
         Close();
+    }
+
+    /// <summary>A checkbox that owner-draws its box and checkmark, because WinForms' flat checkbox
+    /// indicator renders dark-on-dark and the check is invisible on this theme.</summary>
+    private sealed class DarkCheckBox : CheckBox
+    {
+        private const int BoxSize = 18;
+
+        public DarkCheckBox()
+        {
+            SetStyle(ControlStyles.UserPaint | ControlStyles.OptimizedDoubleBuffer
+                     | ControlStyles.AllPaintingInWmPaint | ControlStyles.ResizeRedraw, true);
+            AutoSize = false;
+            BackColor = Color.Transparent;
+            ForeColor = Theme.Fg;
+            Cursor = Cursors.Hand;
+        }
+
+        protected override void OnCheckedChanged(EventArgs e)
+        {
+            base.OnCheckedChanged(e);
+            Invalidate();
+        }
+
+        protected override void OnPaint(PaintEventArgs e)
+        {
+            var g = e.Graphics;
+            g.Clear(Parent?.BackColor ?? Theme.Bg);
+            g.SmoothingMode = SmoothingMode.AntiAlias;
+
+            int by = (Height - BoxSize) / 2;
+            var box = new Rectangle(0, by, BoxSize, BoxSize);
+
+            using (var fill = new SolidBrush(Checked ? Theme.Accent : Theme.Surface))
+                g.FillRectangle(fill, box);
+            using (var border = new Pen(Checked ? Theme.Accent : Theme.Border))
+                g.DrawRectangle(border, box);
+
+            if (Checked)
+            {
+                using var check = new Pen(Color.White, 2f) { StartCap = LineCap.Round, EndCap = LineCap.Round };
+                g.DrawLines(check, new[]
+                {
+                    new Point(box.Left + 4, box.Top + 9),
+                    new Point(box.Left + 7, box.Top + 13),
+                    new Point(box.Left + 14, box.Top + 5),
+                });
+            }
+
+            int textX = BoxSize + 8;
+            TextRenderer.DrawText(g, Text, Font, new Rectangle(textX, 0, Width - textX, Height),
+                Enabled ? ForeColor : Theme.Muted, TextFormatFlags.Left | TextFormatFlags.VerticalCenter);
+        }
     }
 }
