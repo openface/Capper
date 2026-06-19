@@ -83,14 +83,7 @@ internal sealed class RecordingOverlay : Form
     protected override void OnResize(EventArgs e)
     {
         base.OnResize(e);
-        var path = new GraphicsPath();
-        int d = 14 * 2;
-        path.AddArc(0, 0, d, d, 180, 90);
-        path.AddArc(Width - d, 0, d, d, 270, 90);
-        path.AddArc(Width - d, Height - d, d, d, 0, 90);
-        path.AddArc(0, Height - d, d, d, 90, 90);
-        path.CloseFigure();
-        Region = new Region(path);
+        Region = new Region(GdiHelpers.RoundedRectangle(new Rectangle(0, 0, Width, Height), 14));
     }
 
     protected override void OnPaint(PaintEventArgs e)

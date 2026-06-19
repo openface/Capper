@@ -8,19 +8,9 @@ using Windows.Storage;
 
 namespace Capper;
 
-/// <summary>Probe + trim/re-encode clips using the native Windows.Media.Editing pipeline.</summary>
+/// <summary>Trim/re-encode clips using the native Windows.Media.Editing pipeline.</summary>
 internal static class TrimEngine
 {
-    public readonly record struct ClipInfo(double Seconds, int Width, int Height, long BitrateBps);
-
-    public static async Task<ClipInfo> ProbeAsync(string path)
-    {
-        var file = await StorageFile.GetFileFromPathAsync(path);
-        var clip = await MediaClip.CreateFromFileAsync(file);
-        var vp = clip.GetVideoEncodingProperties();
-        return new ClipInfo(clip.OriginalDuration.TotalSeconds, (int)vp.Width, (int)vp.Height, (long)vp.Bitrate);
-    }
-
     /// <summary>
     /// Trim [start, end] from <paramref name="inputPath"/> and re-encode to <paramref name="outputPath"/>
     /// at the given bitrates, preserving the source resolution. Throws if the render fails.

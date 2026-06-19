@@ -1,5 +1,4 @@
 using System.Runtime.InteropServices;
-using System.Text;
 using Windows.Graphics.Capture;
 using Windows.Graphics.DirectX.Direct3D11;
 using WinRT;
@@ -16,12 +15,6 @@ internal static class Native
 
     [DllImport("user32.dll")]
     private static extern IntPtr GetForegroundWindow();
-
-    [DllImport("user32.dll", CharSet = CharSet.Unicode)]
-    private static extern int GetWindowTextW(IntPtr hWnd, StringBuilder text, int count);
-
-    [DllImport("user32.dll")]
-    private static extern int GetWindowTextLengthW(IntPtr hWnd);
 
     [DllImport("user32.dll")]
     private static extern bool IsWindow(IntPtr hWnd);
@@ -42,16 +35,6 @@ internal static class Native
     {
         var hwnd = GetForegroundWindow();
         return hwnd == IntPtr.Zero || !IsWindow(hwnd) ? IntPtr.Zero : hwnd;
-    }
-
-    public static string GetWindowTitle(IntPtr hwnd)
-    {
-        if (hwnd == IntPtr.Zero) return string.Empty;
-        int len = GetWindowTextLengthW(hwnd);
-        if (len <= 0) return string.Empty;
-        var sb = new StringBuilder(len + 1);
-        GetWindowTextW(hwnd, sb, sb.Capacity);
-        return sb.ToString();
     }
 
     public static bool IsCapturableWindow(IntPtr hwnd) =>

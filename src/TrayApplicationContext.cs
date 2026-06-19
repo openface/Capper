@@ -152,9 +152,15 @@ internal sealed class TrayApplicationContext : ApplicationContext
             UpdateRecordingUi(false);
             _overlay.HideOverlay();
 
-            if (result.Success && File.Exists(result.OutputPath))
+            // The dialog's "final" name must match the staging file we recorded into, so use the path
+            // chosen at Start. It's always set on a successful start; a leftover staging file from the
+            // impossible null case is cleaned up on next launch.
+            string? finalPath = _pendingFinalPath;
+            _pendingFinalPath = null;
+
+            if (result.Success && File.Exists(result.OutputPath) && finalPath != null)
             {
-                OpenTrimDialog(result.OutputPath, _pendingFinalPath ?? BuildOutputPath());
+                OpenTrimDialog(result.OutputPath, finalPath);
             }
             else if (!result.Success)
             {

@@ -83,7 +83,7 @@ internal sealed class TrimDialog : Form
     protected override void OnResize(EventArgs e)
     {
         base.OnResize(e);
-        Region = new Region(Rounded(new Rectangle(0, 0, Width, Height), 14));
+        Region = new Region(GdiHelpers.RoundedRectangle(new Rectangle(0, 0, Width, Height), 14));
     }
 
     protected override void OnPaint(PaintEventArgs e)
@@ -93,19 +93,7 @@ internal sealed class TrimDialog : Form
         using var hb = new SolidBrush(HeaderColor);
         e.Graphics.FillRectangle(hb, 0, 0, Width, 48);
         using var border = new Pen(Color.FromArgb(60, 62, 70));
-        e.Graphics.DrawPath(border, Rounded(new Rectangle(0, 0, Width - 1, Height - 1), 14));
-    }
-
-    private static GraphicsPath Rounded(Rectangle r, int radius)
-    {
-        int d = radius * 2;
-        var p = new GraphicsPath();
-        p.AddArc(r.X, r.Y, d, d, 180, 90);
-        p.AddArc(r.Right - d, r.Y, d, d, 270, 90);
-        p.AddArc(r.Right - d, r.Bottom - d, d, d, 0, 90);
-        p.AddArc(r.X, r.Bottom - d, d, d, 90, 90);
-        p.CloseFigure();
-        return p;
+        e.Graphics.DrawPath(border, GdiHelpers.RoundedRectangle(new Rectangle(0, 0, Width - 1, Height - 1), 14));
     }
 
     private void BuildLayout()

@@ -32,9 +32,6 @@ internal sealed class HotKeyWindow : NativeWindow, IDisposable
         return RegisterHotKey(Handle, HotKeyId, modifiers | Hotkey.MOD_NOREPEAT, virtualKey);
     }
 
-    /// <summary>Temporarily release the hotkey (e.g. while the user is assigning a new one).</summary>
-    public void Unregister() => UnregisterHotKey(Handle, HotKeyId);
-
     protected override void WndProc(ref Message m)
     {
         if (m.Msg == WM_HOTKEY && m.WParam.ToInt32() == HotKeyId)

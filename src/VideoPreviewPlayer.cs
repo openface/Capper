@@ -1,11 +1,8 @@
-using System.Runtime.InteropServices;
-using Vortice.Direct3D;
 using Vortice.Direct3D11;
 using Vortice.DXGI;
 using Windows.Graphics.DirectX.Direct3D11;
 using Windows.Media.Core;
 using Windows.Media.Playback;
-using static Vortice.Direct3D11.D3D11;
 
 namespace Capper;
 
@@ -17,8 +14,6 @@ namespace Capper;
 /// </summary>
 internal sealed class VideoPreviewPlayer : IDisposable
 {
-    private static readonly Guid ID3D11Texture2DIid = new("6f15aaf2-d208-4e89-9ab4-489535d34f9c");
-
     private readonly MediaPlayer _player;
     private ID3D11Device? _device;
     private ID3D11DeviceContext? _ctx;
@@ -66,9 +61,7 @@ internal sealed class VideoPreviewPlayer : IDisposable
 
     private void InitD3D()
     {
-        var levels = new[] { FeatureLevel.Level_11_1, FeatureLevel.Level_11_0, FeatureLevel.Level_10_1, FeatureLevel.Level_10_0 };
-        D3D11CreateDevice(IntPtr.Zero, DriverType.Hardware, DeviceCreationFlags.BgraSupport,
-            levels, out _device, out _ctx).CheckError();
+        Direct3DHelpers.CreateBgraDevice(out _device, out _ctx);
 
         _rt = _device!.CreateTexture2D(new Texture2DDescription
         {
@@ -89,7 +82,7 @@ internal sealed class VideoPreviewPlayer : IDisposable
         _surface = Native.CreateDirect3DSurface(dxgiSurface.NativePointer);
     }
 
-    private unsafe void OnVideoFrameAvailable(MediaPlayer sender, object args)
+    private void OnVideoFrameAvailable(MediaPlayer sender, object args)
     {
         if (_disposed || !FrameServerOk) return;
         try
@@ -101,20 +94,9 @@ internal sealed class VideoPreviewPlayer : IDisposable
                 sender.CopyFrameToVideoSurface(_surface);                  // scales the frame to _w x _h
                 _ctx.CopyResource(_staging, _rt);
 
-                var map = _ctx.Map((ID3D11Resource)_staging, 0u, MapMode.Read, Vortice.Direct3D11.MapFlags.None);
-                try
-                {
-                    int stride = _w * 4;
-                    var buf = new byte[_h * stride];
-                    fixed (byte* dst = buf)
-                    {
-                        byte* src = (byte*)map.DataPointer;
-                        for (int y = 0; y < _h; y++)
-                            Buffer.MemoryCopy(src + (long)y * map.RowPitch, dst + (long)y * stride, stride, stride);
-                    }
-                    FrameReady?.Invoke(buf, _w, _h);
-                }
-                finally { _ctx.Unmap((ID3D11Resource)_staging, 0u); }
+                var buf = new byte[_h * _w * 4];
+                Direct3DHelpers.ReadStagingRows(_ctx, _staging, _w, _h, buf);
+                FrameReady?.Invoke(buf, _w, _h);
             }
         }
         catch

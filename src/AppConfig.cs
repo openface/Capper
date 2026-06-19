@@ -161,15 +161,6 @@ public sealed class AppConfig
         VideoBitrateKbps = kbps;
     }
 
-    public static string FormatDuration(double seconds)
-    {
-        if (double.IsInfinity(seconds) || seconds <= 0) return "0:00";
-        var ts = TimeSpan.FromSeconds(seconds);
-        return ts.TotalHours >= 1
-            ? $"{(int)ts.TotalHours}:{ts.Minutes:00}:{ts.Seconds:00}"
-            : $"{ts.Minutes}:{ts.Seconds:00}";
-    }
-
     // --- Persistence ---
 
     private static readonly JsonSerializerOptions JsonOpts = new()

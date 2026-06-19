@@ -3,7 +3,6 @@ using System.Runtime.InteropServices;
 using System.Threading;
 using NAudio.CoreAudioApi;
 using NAudio.Wave;
-using Vortice.Direct3D;
 using Vortice.Direct3D11;
 using Vortice.DXGI;
 using Vortice.Mathematics;
@@ -12,7 +11,6 @@ using Windows.Graphics;
 using Windows.Graphics.Capture;
 using Windows.Graphics.DirectX;
 using Windows.Graphics.DirectX.Direct3D11;
-using static Vortice.Direct3D11.D3D11;
 
 namespace Capper;
 
@@ -35,14 +33,8 @@ public sealed class WindowCaptureRecorder : IDisposable
     /// <summary>Raised once when recording ends (manual stop, auto-stop, or error). Marshalled by caller.</summary>
     public event Action<RecordingResult>? Stopped;
 
-    public bool IsRecording { get; private set; }
-
-    /// <summary>Diagnostic: true once recording starts if the GPU video-processor scaler is in use
-    /// (as opposed to no scaling or the Media Foundation fallback).</summary>
-    public bool UsedGpuScaler => _scaler != null;
-
-    /// <summary>Diagnostic: which encoder tunings applied (B-frames, quality-vs-speed, …).</summary>
-    public string EncoderConfigLog { get; private set; } = "";
+    private volatile bool _isRecording;
+    public bool IsRecording => _isRecording;
 
     // D3D / capture
     private ID3D11Device? _device;
@@ -102,13 +94,7 @@ public sealed class WindowCaptureRecorder : IDisposable
         _outW = Math.Max(2, outW & ~1);
 
         // --- Direct3D device (BGRA support required for WGC interop) ---
-        var levels = new[]
-        {
-            FeatureLevel.Level_11_1, FeatureLevel.Level_11_0,
-            FeatureLevel.Level_10_1, FeatureLevel.Level_10_0,
-        };
-        D3D11CreateDevice(IntPtr.Zero, DriverType.Hardware, DeviceCreationFlags.BgraSupport,
-            levels, out _device, out _context).CheckError();
+        Direct3DHelpers.CreateBgraDevice(out _device, out _context);
         using (var dxgi = _device!.QueryInterface<IDXGIDevice>())
         {
             _d3dDevice = Native.CreateDirect3DDevice(dxgi.NativePointer);
@@ -178,12 +164,13 @@ public sealed class WindowCaptureRecorder : IDisposable
         inType.Dispose();
 
         // Tune the now-instantiated encoder MFT (B-frames, quality-vs-speed) for better quality/byte.
+        // Best-effort: if the codec API is unavailable the encoder's defaults still produce a valid clip.
         try
         {
             IntPtr codecPtr = _writer.GetServiceForStream(_streamIndex, Guid.Empty, H264EncoderConfig.IID_ICodecAPI);
-            EncoderConfigLog = codecPtr != IntPtr.Zero ? H264EncoderConfig.Apply(codecPtr, cfg.VideoBitrateKbps) : "codecapi: null";
+            if (codecPtr != IntPtr.Zero) H264EncoderConfig.Apply(codecPtr, cfg.VideoBitrateKbps);
         }
-        catch (Exception ex) { EncoderConfigLog = "codecapi: " + ex.Message; }
+        catch { /* leave the encoder at its defaults */ }
 
         // Optional system-audio (loopback) stream, added before BeginWriting.
         if (cfg.AudioSource == AudioSource.System)
@@ -200,7 +187,7 @@ public sealed class WindowCaptureRecorder : IDisposable
         _poolSize = size;
         _item.Closed += OnItemClosed; // window closed -> auto-stop and finalize
 
-        IsRecording = true;
+        _isRecording = true;
         _session.StartCapture();
 
         _encodeThread = new Thread(EncodeLoop) { IsBackground = true, Name = "Capper.Encode" };
@@ -415,21 +402,8 @@ public sealed class WindowCaptureRecorder : IDisposable
             catch { return; }
             ctx.CopyResource(staging, _scaler.Output);
 
-            var sm = ctx.Map((ID3D11Resource)staging, 0u, MapMode.Read, Vortice.Direct3D11.MapFlags.None);
-            try
-            {
-                int stride = _encW * 4;
-                lock (_bufLock)
-                {
-                    fixed (byte* dstBase = _frameBuffer)
-                    {
-                        byte* s = (byte*)sm.DataPointer;
-                        for (int y = 0; y < _encH; y++)
-                            Buffer.MemoryCopy(s + (long)y * sm.RowPitch, dstBase + (long)y * stride, stride, stride);
-                    }
-                }
-            }
-            finally { ctx.Unmap((ID3D11Resource)staging, 0u); }
+            lock (_bufLock)
+                Direct3DHelpers.ReadStagingRows(ctx, staging, _encW, _encH, _frameBuffer);
             _firstFrame.Set();
             return;
         }
@@ -589,7 +563,7 @@ public sealed class WindowCaptureRecorder : IDisposable
         _staging = null; _context = null; _device = null; _d3dDevice = null; _item = null;
         _audioCapture = null; _scaler = null;
 
-        IsRecording = false;
+        _isRecording = false;
         Stopped?.Invoke(new RecordingResult(error == null, _outputPath, _recordedSeconds, error));
     }
 
