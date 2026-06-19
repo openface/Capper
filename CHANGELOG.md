@@ -6,10 +6,17 @@ All notable changes to Capper are documented here. The format is based on
 
 ## [Unreleased]
 
+## [1.0.2] - 2026-06-19
+
+### Changed
+- **Check for updates…** is now a manual tray menu item; Capper no longer checks automatically on
+  startup.
+
+## [1.0.1] - 2026-06-19
+
 ### Added
 - **In-app updates** via [Velopack](https://velopack.io): an installer (`Capper-win-Setup.exe`) with
-  delta updates, plus a **Check for updates…** tray menu item that installs a newer version and
-  restarts.
+  delta updates, and an "Install update" flow that downloads a newer version and restarts.
 
 ### Fixed
 - Recording no longer plays back **too fast toward the end**: frames are now timestamped by real
@@ -29,5 +36,7 @@ All notable changes to Capper are documented here. The format is based on
   and MP4 **fast-start** so clips stream immediately — all with no external dependencies (no ffmpeg).
 - Dark UI theme, app/tray icon, and optional run-at-login.
 
-[Unreleased]: https://github.com/openface/Capper/compare/v1.0.0...HEAD
+[Unreleased]: https://github.com/openface/Capper/compare/v1.0.2...HEAD
+[1.0.2]: https://github.com/openface/Capper/compare/v1.0.1...v1.0.2
+[1.0.1]: https://github.com/openface/Capper/compare/v1.0.0...v1.0.1
 [1.0.0]: https://github.com/openface/Capper/releases/tag/v1.0.0
