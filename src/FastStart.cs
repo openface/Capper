@@ -1,3 +1,4 @@
+using System.Buffers.Binary;
 using System.IO;
 
 namespace Capper;
@@ -31,7 +32,7 @@ internal static class FastStart
                 // Read and patch the moov box; mdat moves forward by exactly moov's size.
                 var moovBytes = new byte[moov.Size];
                 fs.Position = moov.Start;
-                ReadFully(fs, moovBytes, 0, moovBytes.Length);
+                fs.ReadExactly(moovBytes);
                 PatchChunkOffsets(moovBytes, 0, moovBytes.Length, moov.Size);
 
                 using var outFs = File.Create(tmp);
@@ -78,13 +79,13 @@ internal static class FastStart
         while (s.Position + 8 <= len)
         {
             long start = s.Position;
-            ReadFully(s, hdr, 0, 8);
-            long size = ReadU32(hdr, 0);
+            s.ReadExactly(hdr.AsSpan(0, 8));
+            long size = BinaryPrimitives.ReadUInt32BigEndian(hdr.AsSpan(0));
             string type = System.Text.Encoding.ASCII.GetString(hdr, 4, 4);
             if (size == 1)
             {
-                ReadFully(s, hdr, 8, 8);
-                size = ReadU64(hdr, 8);
+                s.ReadExactly(hdr.AsSpan(8, 8));
+                size = (long)BinaryPrimitives.ReadUInt64BigEndian(hdr.AsSpan(8));
             }
             else if (size == 0)
             {
@@ -103,10 +104,10 @@ internal static class FastStart
         int p = offset;
         while (p + 8 <= end)
         {
-            long size = ReadU32(buf, p);
+            long size = BinaryPrimitives.ReadUInt32BigEndian(buf.AsSpan(p));
             string type = System.Text.Encoding.ASCII.GetString(buf, p + 4, 4);
             int header = 8;
-            if (size == 1) { size = ReadU64(buf, p + 8); header = 16; }
+            if (size == 1) { size = (long)BinaryPrimitives.ReadUInt64BigEndian(buf.AsSpan(p + 8)); header = 16; }
             if (size < header || p + size > end) break;
 
             int content = p + header;
@@ -117,54 +118,24 @@ internal static class FastStart
                     break;
                 case "stco": // 32-bit chunk offsets
                 {
-                    long count = ReadU32(buf, content + 4); // after version+flags
+                    long count = BinaryPrimitives.ReadUInt32BigEndian(buf.AsSpan(content + 4)); // after version+flags
                     int e = content + 8;
                     for (long i = 0; i < count && e + 4 <= p + size; i++, e += 4)
-                        WriteU32(buf, e, (uint)(ReadU32(buf, e) + delta));
+                        BinaryPrimitives.WriteUInt32BigEndian(buf.AsSpan(e),
+                            (uint)(BinaryPrimitives.ReadUInt32BigEndian(buf.AsSpan(e)) + delta));
                     break;
                 }
                 case "co64": // 64-bit chunk offsets
                 {
-                    long count = ReadU32(buf, content + 4);
+                    long count = BinaryPrimitives.ReadUInt32BigEndian(buf.AsSpan(content + 4));
                     int e = content + 8;
                     for (long i = 0; i < count && e + 8 <= p + size; i++, e += 8)
-                        WriteU64(buf, e, (ulong)(ReadU64(buf, e) + delta));
+                        BinaryPrimitives.WriteUInt64BigEndian(buf.AsSpan(e),
+                            BinaryPrimitives.ReadUInt64BigEndian(buf.AsSpan(e)) + (ulong)delta);
                     break;
                 }
             }
             p += (int)size;
-        }
-    }
-
-    // --- big-endian helpers ---
-    private static long ReadU32(byte[] b, int o) =>
-        ((long)b[o] << 24) | ((long)b[o + 1] << 16) | ((long)b[o + 2] << 8) | b[o + 3];
-
-    private static long ReadU64(byte[] b, int o)
-    {
-        long v = 0;
-        for (int i = 0; i < 8; i++) v = (v << 8) | b[o + i];
-        return v;
-    }
-
-    private static void WriteU32(byte[] b, int o, uint v)
-    {
-        b[o] = (byte)(v >> 24); b[o + 1] = (byte)(v >> 16); b[o + 2] = (byte)(v >> 8); b[o + 3] = (byte)v;
-    }
-
-    private static void WriteU64(byte[] b, int o, ulong v)
-    {
-        for (int i = 7; i >= 0; i--) { b[o + i] = (byte)v; v >>= 8; }
-    }
-
-    private static void ReadFully(Stream s, byte[] buf, int offset, int count)
-    {
-        int read = 0;
-        while (read < count)
-        {
-            int n = s.Read(buf, offset + read, count - read);
-            if (n <= 0) throw new EndOfStreamException();
-            read += n;
         }
     }
 
