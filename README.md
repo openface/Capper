@@ -139,15 +139,23 @@ persist to `%APPDATA%\Capper\config.json`.
 
 ## Installation
 
-Requirements: **.NET 9 SDK** (Windows). The project targets `net9.0-windows10.0.19041.0`.
+**End users:** download `Capper-win-Setup.exe` from the
+[latest release](https://github.com/openface/Capper/releases/latest) and run it. It installs to your
+user profile (no admin needed), adds Start Menu/Desktop shortcuts, and from then on Capper
+**updates itself** — when a new version is published it shows a tray notification and a
+"Install update" menu item that applies it on restart. (The installer is currently unsigned, so
+Windows SmartScreen shows a one-time "More info → Run anyway" prompt.)
+
+**Building from source:** requires the **.NET 9 SDK** (Windows). The project targets
+`net9.0-windows10.0.19041.0`.
 
 ```sh
 # Debug build / run
 dotnet run
 
-# Self-contained single-file release (one Capper.exe, ~57 MB, no runtime needed)
-dotnet publish -c Release
-# -> bin/Release/net9.0-windows10.0.19041.0/win-x64/publish/Capper.exe
+# Self-contained release into a folder (no runtime needed on the target machine)
+dotnet publish -c Release -r win-x64 -o publish
+# -> publish/Capper.exe (+ its dependencies)
 ```
 
 If NuGet has no source configured on a fresh machine:
@@ -155,6 +163,20 @@ If NuGet has no source configured on a fresh machine:
 ```sh
 dotnet nuget add source https://api.nuget.org/v3/index.json -n nuget.org
 ```
+
+## Releasing
+
+Releases are built and published by GitHub Actions ([`.github/workflows/release.yml`](.github/workflows/release.yml))
+using [Velopack](https://velopack.io). To cut a release, push a SemVer tag — the tag is the version:
+
+```sh
+git tag v1.2.0 && git push origin v1.2.0          # stable
+git tag v1.2.0-rc.1 && git push origin v1.2.0-rc.1 # pre-release (hyphen -> marked pre-release)
+```
+
+The workflow runs the tests, publishes a self-contained build, then `vpk pack` produces the installer
+plus full/delta update packages and an update manifest, and `vpk upload github` attaches them to the
+GitHub Release. Installed copies pick up the update from that manifest automatically.
 
 ## Running the tests
 

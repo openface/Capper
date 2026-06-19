@@ -1,5 +1,6 @@
 using System.Threading;
 using System.Windows.Forms;
+using Velopack;
 
 namespace Capper;
 
@@ -8,6 +9,10 @@ internal static class Program
     [STAThread]
     private static void Main()
     {
+        // Must run first: during install/update/uninstall Velopack relaunches the exe with special
+        // arguments, handles them here, and exits before any UI (or the single-instance mutex) starts.
+        VelopackApp.Build().Run();
+
         using var mutex = new Mutex(true, "Capper_SingleInstance_4b1d9f0e", out bool createdNew);
         if (!createdNew)
         {

@@ -1,3 +1,7 @@
 bin/
 obj/
 *.user
+
+# Velopack / publish output
+publish/
+Releases/

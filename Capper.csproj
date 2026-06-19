@@ -20,12 +20,10 @@
     <Description>Quick active-window clip recorder for sharing.</Description>
   </PropertyGroup>
 
-  <!-- Self-contained single-file publish: produces one Capper.exe with no external deps. -->
+  <!-- Self-contained publish (no runtime needed on the user's machine). Velopack packs the published
+       folder into an installer + delta updates, so we no longer single-file the exe ourselves. -->
   <PropertyGroup Condition="'$(Configuration)' == 'Release'">
     <SelfContained>true</SelfContained>
-    <PublishSingleFile>true</PublishSingleFile>
-    <IncludeNativeLibrariesForSelfExtract>true</IncludeNativeLibrariesForSelfExtract>
-    <EnableCompressionInSingleFile>true</EnableCompressionInSingleFile>
   </PropertyGroup>
 
   <!-- The test project lives under the repo; keep its sources out of the app build. -->
@@ -41,6 +39,7 @@
   </ItemGroup>
 
   <ItemGroup>
+    <PackageReference Include="Velopack" Version="1.2.0" />
     <PackageReference Include="Vortice.Direct3D11" Version="3.6.2" />
     <PackageReference Include="Vortice.DXGI" Version="3.6.2" />
     <PackageReference Include="Vortice.MediaFoundation" Version="3.6.2" />

@@ -2,6 +2,8 @@ name: Release
 
 # Cut a release by pushing a SemVer tag, e.g.:
 #   git tag v1.1.0 && git push origin v1.1.0
+# Velopack builds an installer (Capper-win-Setup.exe) plus full/delta update packages and a
+# release manifest, then publishes them to the GitHub Release. Installed users auto-update from these.
 on:
   push:
     tags: ['v*']
@@ -28,14 +30,38 @@ jobs:
         shell: bash
         run: echo "version=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
 
-      # Self-contained single-file Capper.exe (no runtime needed on the user's machine).
-      - name: Publish
-        run: dotnet publish Capper.csproj -c Release -p:Version=${{ steps.ver.outputs.version }}
+      - name: Install Velopack CLI
+        run: dotnet tool install -g vpk --version 1.2.0
 
-      - name: Create GitHub Release
-        uses: softprops/action-gh-release@v2
-        with:
-          files: bin/Release/net9.0-windows10.0.19041.0/win-x64/publish/Capper.exe
-          generate_release_notes: true
-          # Tags containing a hyphen (e.g. v1.1.0-rc.1) are marked as pre-releases.
-          prerelease: ${{ contains(github.ref_name, '-') }}
+      # Self-contained publish into a folder (Velopack packs the folder; not single-file).
+      - name: Publish
+        run: dotnet publish Capper.csproj -c Release -r win-x64 -o publish -p:Version=${{ steps.ver.outputs.version }}
+
+      # Pull the current latest release so vpk can generate a small delta against it.
+      # First-ever release has nothing to download, so this is allowed to fail.
+      - name: Download previous release (for deltas)
+        run: vpk download github --repoUrl https://github.com/${{ github.repository }} --token ${{ secrets.GITHUB_TOKEN }}
+        continue-on-error: true
+
+      - name: Pack
+        run: >
+          vpk pack
+          --packId Capper
+          --packVersion ${{ steps.ver.outputs.version }}
+          --packDir publish
+          --mainExe Capper.exe
+          --packTitle Capper
+          --packAuthors openface
+          --icon Capper.ico
+
+      # Tags containing a hyphen (e.g. v1.1.0-rc.1) are published as GitHub pre-releases.
+      - name: Upload to GitHub Release
+        shell: bash
+        run: >
+          vpk upload github
+          --repoUrl https://github.com/${{ github.repository }}
+          --token ${{ secrets.GITHUB_TOKEN }}
+          --releaseName "Capper ${{ steps.ver.outputs.version }}"
+          --tag ${{ github.ref_name }}
+          --merge --publish
+          $([[ "${{ github.ref_name }}" == *-* ]] && echo --pre)

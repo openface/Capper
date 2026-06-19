@@ -4,7 +4,9 @@ using System.IO;
 using System.Linq;
 using System.Text;
 using System.Threading;
+using System.Threading.Tasks;
 using System.Windows.Forms;
+using Velopack;
 
 namespace Capper;
 
@@ -30,6 +32,11 @@ internal sealed class TrayApplicationContext : ApplicationContext
     private string? _pendingFinalPath;
     private bool _hotkeyActive;
     private bool _balloonOpensConfig;
+
+    private readonly UpdateService _updates = new();
+    private UpdateInfo? _pendingUpdate;
+    private ToolStripMenuItem? _updateMenuItem;
+    private bool _balloonInstallsUpdate;
 
     public TrayApplicationContext()
     {
@@ -61,6 +68,11 @@ internal sealed class TrayApplicationContext : ApplicationContext
         _tray.BalloonTipClicked += (_, _) =>
         {
             if (_balloonOpensConfig) { _balloonOpensConfig = false; OpenConfig(); }
+            else if (_balloonInstallsUpdate && _pendingUpdate != null)
+            {
+                _balloonInstallsUpdate = false;
+                ApplyUpdate(_pendingUpdate);
+            }
         };
 
         _hotkey = new HotKeyWindow();
@@ -76,6 +88,55 @@ internal sealed class TrayApplicationContext : ApplicationContext
         Notify("Capper is running",
             $"Press {_config.Hotkey.Display} while a window is focused to start recording it; " +
             "press again to stop and trim.", ToolTipIcon.Info);
+
+        _ = CheckForUpdatesAsync(); // background; no-op unless installed via Velopack
+    }
+
+    // --- Auto-update (Velopack) ---
+
+    private async Task CheckForUpdatesAsync()
+    {
+        var info = await _updates.CheckAsync();
+        if (info != null) _ui.Post(_ => OnUpdateAvailable(info), null);
+    }
+
+    /// <summary>An update is ready: surface it without interrupting. The user installs on their own
+    /// schedule via the balloon or the tray menu item (both apply the update and restart Capper).</summary>
+    private void OnUpdateAvailable(UpdateInfo info)
+    {
+        _pendingUpdate = info;
+        string ver = info.TargetFullRelease.Version.ToString();
+
+        if (_updateMenuItem == null && _tray.ContextMenuStrip is { } menu)
+        {
+            _updateMenuItem = new ToolStripMenuItem($"Install update v{ver} (restarts Capper)", null,
+                (_, _) => { if (_pendingUpdate != null) ApplyUpdate(_pendingUpdate); });
+            menu.Items.Insert(0, new ToolStripSeparator());
+            menu.Items.Insert(0, _updateMenuItem);
+        }
+
+        Notify("Capper update available",
+            $"Version {ver} is ready. Click to install and restart, or use the tray menu later.",
+            ToolTipIcon.Info, 6000, installsUpdate: true);
+    }
+
+    private async void ApplyUpdate(UpdateInfo info)
+    {
+        if (_updateMenuItem != null) { _updateMenuItem.Enabled = false; _updateMenuItem.Text = "Downloading update…"; }
+        try { _recorder?.Stop(); } catch { /* finalize whatever was recording before we restart */ }
+        try
+        {
+            await _updates.DownloadAndApplyAsync(info); // restarts into the new version; no return on success
+        }
+        catch (Exception ex)
+        {
+            Notify("Capper — update failed", ex.Message, ToolTipIcon.Error, 6000);
+            if (_updateMenuItem != null)
+            {
+                _updateMenuItem.Enabled = true;
+                _updateMenuItem.Text = $"Install update v{info.TargetFullRelease.Version} (restarts Capper)";
+            }
+        }
     }
 
     private void OnHotkey()
@@ -202,9 +263,11 @@ internal sealed class TrayApplicationContext : ApplicationContext
     }
 
     /// <summary>Show a tray balloon. If <paramref name="opensConfig"/> is set, clicking it opens Configure.</summary>
-    private void Notify(string title, string message, ToolTipIcon icon, int ms = 4000, bool opensConfig = false)
+    private void Notify(string title, string message, ToolTipIcon icon, int ms = 4000,
+        bool opensConfig = false, bool installsUpdate = false)
     {
         _balloonOpensConfig = opensConfig;
+        _balloonInstallsUpdate = installsUpdate;
         _tray.ShowBalloonTip(ms, title, message, icon);
     }
 

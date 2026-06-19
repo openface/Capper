@@ -6,6 +6,17 @@ All notable changes to Capper are documented here. The format is based on
 
 ## [Unreleased]
 
+### Added
+- **Auto-update** via [Velopack](https://velopack.io): an installer (`Capper-win-Setup.exe`) with
+  delta updates. Installed copies notify in the tray when a new version is available and apply it on
+  restart.
+
+### Fixed
+- Recording no longer plays back **too fast toward the end**: frames are now timestamped by real
+  elapsed time, so playback stays at true speed even when the encoder briefly falls behind.
+- **Trim preview playback** is smooth: removed per-frame allocations that caused GC stalls, added
+  frame-drop backpressure, and matched the decode resolution to the preview size for a sharper image.
+
 ## [1.0.0] - 2026-06-18
 
 ### Added
