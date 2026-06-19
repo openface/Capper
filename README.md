@@ -37,11 +37,13 @@ The unobtrusive **Now Recording** pill (bottom-center while capturing):
 
 ![Recording pill](docs/recording-pill.png)
 
+The **Trim and Save Clip** dialog — scrub, set in/out points, watch the estimated size, then save:
+
+![Trim and Save Clip dialog](docs/trim-dialog.png)
+
 The **Settings** window (tray → Configure…):
 
 ![Settings](docs/settings.png)
-
-<!-- TODO: add docs/trim-dialog.png — the Trim and Save Clip dialog (needs a recorded clip to capture). -->
 
 ## Features
 
