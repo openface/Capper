@@ -6,6 +6,8 @@ All notable changes to Capper are documented here. The format is based on
 
 ## [Unreleased]
 
+## [1.0.3] - 2026-11-05
+
 ### Fixed
 - **Stuttery recordings** of fast-moving content (games, animations), most visible on high-refresh
   displays. Windows' capture API delivered at most ~60 frames/s by default, which a 144 Hz display
@@ -53,7 +55,8 @@ All notable changes to Capper are documented here. The format is based on
   and MP4 **fast-start** so clips stream immediately — all with no external dependencies (no ffmpeg).
 - Dark UI theme, app/tray icon, and optional run-at-login.
 
-[Unreleased]: https://github.com/openface/Capper/compare/v1.0.2...HEAD
+[Unreleased]: https://github.com/openface/Capper/compare/v1.0.3...HEAD
+[1.0.3]: https://github.com/openface/Capper/compare/v1.0.2...v1.0.3
 [1.0.2]: https://github.com/openface/Capper/compare/v1.0.1...v1.0.2
 [1.0.1]: https://github.com/openface/Capper/compare/v1.0.0...v1.0.1
 [1.0.0]: https://github.com/openface/Capper/releases/tag/v1.0.0
