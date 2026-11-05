@@ -6,6 +6,23 @@ All notable changes to Capper are documented here. The format is based on
 
 ## [Unreleased]
 
+### Fixed
+- **Stuttery recordings** of fast-moving content (games, animations), most visible on high-refresh
+  displays. Windows' capture API delivered at most ~60 frames/s by default, which a 144 Hz display
+  rounds down to 48 Hz; encoding that at 30 fps made motion lurch between half and double speed.
+  Capper now captures every vsync (Windows 11 24H2+).
+- Frames are now placed on the 30/60 fps timeline by their **capture timestamp** instead of a
+  sleep-paced sampling loop, so Windows' coarse ~15.6 ms timer can't make frame spacing uneven.
+
+### Added
+- **Save & Copy** button in the Trim dialog: saves the clip and copies it to the clipboard as a file,
+  so it can be pasted straight into Discord.
+- Each recording appends a line of capture stats (frames received, longest gap, repeated frames) to
+  `%APPDATA%\Capper\recordings.log`, to help diagnose any stuttery clip.
+
+### Changed
+- Builds against the Windows 10.0.26100 SDK (still runs on Windows 10 1809+).
+
 ## [1.0.2] - 2026-06-19
 
 ### Changed

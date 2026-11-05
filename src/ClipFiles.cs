@@ -29,8 +29,9 @@ internal static class ClipFiles
                      Path.GetFileNameWithoutExtension(finalPath) + suffix + Path.GetExtension(finalPath));
 
     /// <summary>Move <paramref name="from"/> onto <paramref name="to"/>, retrying briefly while the
-    /// source may still be releasing handles. Falls back to a "_1" sibling if the target is locked.</summary>
-    public static void Promote(string from, string to)
+    /// source may still be releasing handles. Falls back to a "_1" sibling if the target is locked.
+    /// Returns the path the clip actually ended up at.</summary>
+    public static string Promote(string from, string to)
     {
         for (int i = 0; i < 12; i++)
         {
@@ -38,12 +39,13 @@ internal static class ClipFiles
             {
                 if (File.Exists(to)) File.Delete(to);
                 File.Move(from, to);
-                return;
+                return to;
             }
             catch (IOException) { Thread.Sleep(150); }
         }
         string alt = Path.Combine(Path.GetDirectoryName(to)!, Path.GetFileNameWithoutExtension(to) + "_1" + Path.GetExtension(to));
         if (File.Exists(from)) File.Move(from, alt, overwrite: true);
+        return alt;
     }
 
     /// <summary>Delete a clip file, retrying briefly while a handle may still be releasing.</summary>

@@ -58,12 +58,14 @@ The **Settings** window (tray → Configure…):
 - **Quality presets** — one pick sets resolution, frame rate, and bitrate (see [How to use](#how-to-use)).
 - **Share-ready output** — finished clips are rewritten **fast-start** (`moov` atom first) so they
   stream and scrub immediately.
+- **Save & Copy** — one click in the Trim dialog saves the clip and puts it on the clipboard as a
+  file, ready to paste straight into Discord (Ctrl+V).
 - **Background agent** — optionally launches at login and waits quietly in the tray.
 - **Zero external dependencies** — no ffmpeg, no shipped binaries.
 
 ## Built with
 
-- **C# / .NET 9** (`net9.0-windows10.0.19041.0`), **WinForms** for the tray, pill, and dialogs.
+- **C# / .NET 9** (`net9.0-windows10.0.26100.0`), **WinForms** for the tray, pill, and dialogs.
 - **Windows.Graphics.Capture** + **Direct3D 11** for capture and GPU downscaling.
 - **Media Foundation** (`IMFSinkWriter`, `ICodecAPI`) for H.264 + AAC encoding.
 - **Windows.Media.Editing** / **Windows.Media.Playback** for trimming and preview playback.
@@ -86,7 +88,9 @@ The **Settings** window (tray → Configure…):
    - Drag the **green (start)** and **red (end)** handles to keep just the part you want — the preview
      follows the handle you drag, and the selection length and **estimated file size** are shown.
    - **Save** re-encodes the selected range into your output folder (with a **Cancel** button while it
-     works); **Discard** throws the recording away; the **✕** keeps the full, untrimmed clip.
+     works); **Save & Copy** does the same and then puts the clip on the clipboard, so you can paste
+     it straight into Discord with **Ctrl+V**; **Discard** throws the recording away; the **✕** keeps
+     the full, untrimmed clip.
 
 Files in your output folder name their state, so an in-progress recording is never mistaken for a
 finished clip:
@@ -147,7 +151,7 @@ user profile (no admin needed) and adds Start Menu/Desktop shortcuts. To update 
 unsigned, so Windows SmartScreen shows a one-time "More info → Run anyway" prompt.)
 
 **Building from source:** requires the **.NET 9 SDK** (Windows). The project targets
-`net9.0-windows10.0.19041.0`.
+`net9.0-windows10.0.26100.0`.
 
 ```sh
 # Debug build / run

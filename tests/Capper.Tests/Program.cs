@@ -47,7 +47,8 @@ try
     Console.WriteLine("ClipFiles lifecycle (promote / discard)");
     string pending = ClipFiles.PendingPath(final);
     File.WriteAllText(pending, "RECORDED");
-    ClipFiles.Promote(pending, final); // keep / save -> finished clip
+    string promoted = ClipFiles.Promote(pending, final); // keep / save -> finished clip
+    Check("Promote returns where the clip landed", promoted == final);
     Check("Promote creates the finished clip", File.Exists(final));
     Check("Promote removes the pending file", !File.Exists(pending));
     Check("Promote preserves contents", File.ReadAllText(final) == "RECORDED");
@@ -62,6 +63,7 @@ try
     Check("Discard deletes the clip", !File.Exists(final));
     ClipFiles.Discard(final); // discarding a missing file is a no-op
     Check("Discard on a missing file is a no-op (no throw)", true);
+
 
     // ---------------------------------------------------------------
     Console.WriteLine("AppConfig capture mode");
@@ -100,6 +102,10 @@ try
     // ---------------------------------------------------------------
     Console.WriteLine("FastStart relocates moov ahead of mdat and fixes chunk offsets");
     FastStartTest(Check, tmpRoot);
+
+    // ---------------------------------------------------------------
+    Console.WriteLine("FrameSlotter constant-frame-rate timeline");
+    FrameSlotterTest(Check);
 }
 finally
 {
@@ -111,6 +117,62 @@ Console.WriteLine(failures == 0 ? "ALL TESTS PASSED" : $"{failures} TEST(S) FAIL
 return failures;
 
 // ===================================================================
+
+static void FrameSlotterTest(Action<string, bool> check)
+{
+    const long Sec = 10_000_000L;
+
+    var s30 = new FrameSlotter(30, 0);
+    check("slot times are exact (slot 30 at 30 fps == 1 s)", s30.SlotTimeHns(30) == Sec);
+    long sum = 0;
+    for (long k = 0; k < 300; k++) sum += s30.SlotDurationHns(k);
+    check("slot durations tile the timeline with no drift", sum == s30.SlotTimeHns(300));
+    check("nothing is due before the origin", new FrameSlotter(30, 5 * Sec).SlotsBefore(4 * Sec) == 0);
+
+    // Mirrors WindowCaptureRecorder.EncodeLoop: frames close earlier slots by capture time; returns the
+    // frame index shown in each output slot (static stretches are filled at the end).
+    static List<int> Simulate(int fps, long[] captureTimes, long endHns)
+    {
+        var slotter = FrameSlotter.StartingAt(fps, captureTimes[0]);
+        var shown = new List<int>();
+        int held = 0;
+        for (int i = 1; i < captureTimes.Length; i++)
+        {
+            for (long n = slotter.SlotsBefore(captureTimes[i]); n > 0; n--) { slotter.Take(); shown.Add(held); }
+            held = i;
+        }
+        for (long n = slotter.SlotsBefore(endHns); n > 0; n--) { slotter.Take(); shown.Add(held); }
+        return shown;
+    }
+
+    // A 60 Hz source with +-1 ms timestamp jitter, recorded at 30 fps: every output frame must be a new
+    // frame (no duplicate-then-skip judder), advancing by exactly two source frames each time.
+    var rng = new Random(1234);
+    long vsync = Sec / 60;
+    var t60 = Enumerable.Range(0, 600).Select(i => 1_000 * Sec + i * vsync + rng.Next(-10_000, 10_001)).ToArray();
+    var out60 = Simulate(30, t60, t60[^1]);
+    // (Slot 0 always shows the first captured frame, so judge steadiness from slot 1 on.)
+    var steady = out60.Skip(1).ToList();
+    bool steady60 = steady.Zip(steady.Skip(1), (a, b) => b - a).All(d => d == 2);
+    check($"60 Hz source -> 30 fps: every slot advances 2 source frames ({out60.Count} slots)", steady60 && out60.Count >= 295);
+
+    // A 30 Hz source (frames on every other vsync) at 30 fps: one-to-one, no repeats or drops.
+    var t30 = Enumerable.Range(0, 300).Select(i => 1_000 * Sec + i * 2 * vsync + rng.Next(-10_000, 10_001)).ToArray();
+    var out30 = Simulate(30, t30, t30[^1]);
+    bool oneToOne30 = out30.Skip(1).Zip(out30.Skip(2), (a, b) => b - a).All(d => d == 1);
+    check("30 Hz source -> 30 fps: one-to-one, no repeats or drops", oneToOne30 && out30.Count >= 295);
+
+    // Static window: one frame, then nothing for 2 s -> the held frame fills ~60 slots.
+    var outStatic = Simulate(30, new[] { 1_000 * Sec }, 1_002 * Sec);
+    check("static window repeats the held frame to fill time", outStatic.Count >= 59 && outStatic.Count <= 61 && outStatic.All(x => x == 0));
+
+    // Playback length tracks capture time regardless of how frames bunch up (e.g. encoder stalls).
+    var bunched = new long[] { 0, 1 * Sec, 1 * Sec + 1, 1 * Sec + 2, 3 * Sec };
+    var slotter = new FrameSlotter(30, 0);
+    long total = 0;
+    foreach (var t in bunched.Skip(1)) for (long n = slotter.SlotsBefore(t); n > 0; n--) { slotter.Take(); total++; }
+    check("slot count follows capture time, not arrival bunching (3 s -> 90 slots)", total == 90);
+}
 
 static void FastStartTest(Action<string, bool> check, string dir)
 {

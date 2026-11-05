@@ -16,6 +16,7 @@
     <Compile Include="..\..\src\ClipFiles.cs" Link="src\ClipFiles.cs" />
     <Compile Include="..\..\src\FastStart.cs" Link="src\FastStart.cs" />
     <Compile Include="..\..\src\AppConfig.cs" Link="src\AppConfig.cs" />
+    <Compile Include="..\..\src\FrameSlotter.cs" Link="src\FrameSlotter.cs" />
   </ItemGroup>
 
 </Project>

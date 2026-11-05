@@ -40,7 +40,11 @@ internal sealed class TrimDialog : Form
     private readonly Label _info = new();
     private readonly ProgressBar _progress = new();
     private readonly Button _save = new();
+    private readonly Button _saveCopy = new();
     private readonly Button _discard = new();
+
+    /// <summary>Raised (on the UI thread) with the saved clip's path when the user picks "Save &amp; Copy".</summary>
+    public event Action<string>? SavedForCopy;
     private readonly Button _cancel = new();
     private System.Threading.CancellationTokenSource? _trimCts;
 
@@ -157,17 +161,23 @@ internal sealed class TrimDialog : Form
         Controls.Add(_progress);
         y += 16;
 
-        StyleButton(_save, "Save", Accent, AccentHover, Color.White);
-        _save.SetBounds(ClientSize.Width - pad - 110, y, 110, 34);
-        _save.Click += async (_, _) => await SaveAsync();
+        // Right to left: [Discard] [Save] [Save & Copy]. Save & Copy is the primary action: it saves the
+        // trimmed clip and puts it on the clipboard, ready to paste into Discord.
+        int right = ClientSize.Width - pad;
+        StyleButton(_saveCopy, "Save && Copy", Accent, AccentHover, Color.White);
+        _saveCopy.SetBounds(right - 130, y, 130, 34);
+        _saveCopy.Click += async (_, _) => await SaveAsync(copyAfter: true);
+        StyleButton(_save, "Save", Chip, Color.FromArgb(62, 64, 72), Fg);
+        _save.SetBounds(right - 130 - 8 - 84, y, 84, 34);
+        _save.Click += async (_, _) => await SaveAsync(copyAfter: false);
         StyleButton(_discard, "Discard", Chip, Color.FromArgb(74, 50, 52), Color.FromArgb(230, 130, 130));
-        _discard.SetBounds(ClientSize.Width - pad - 110 - 104, y, 96, 34);
+        _discard.SetBounds(right - 130 - 8 - 84 - 8 - 96, y, 96, 34);
         _discard.Click += (_, _) => DiscardAndClose();
-        Controls.Add(_save); Controls.Add(_discard);
+        Controls.Add(_saveCopy); Controls.Add(_save); Controls.Add(_discard);
 
-        // Shown in place of Save/Discard while an export is running.
+        // Shown in place of the Save buttons/Discard while an export is running.
         StyleButton(_cancel, "Cancel", Chip, Color.FromArgb(62, 64, 72), Fg);
-        _cancel.SetBounds(ClientSize.Width - pad - 110, y, 110, 34);
+        _cancel.SetBounds(right - 130, y, 130, 34);
         _cancel.Visible = false;
         _cancel.Click += (_, _) => { _cancel.Enabled = false; _trimCts?.Cancel(); };
         Controls.Add(_cancel);
@@ -212,7 +222,7 @@ internal sealed class TrimDialog : Form
         {
             _title.Text = "Couldn't open clip";
             _info.Text = ex.Message;
-            _save.Enabled = false;
+            _save.Enabled = false; _saveCopy.Enabled = false;
         }
     }
 
@@ -417,14 +427,14 @@ internal sealed class TrimDialog : Form
 
     // --- Save / Discard ---
 
-    private async Task SaveAsync()
+    private async Task SaveAsync(bool copyAfter)
     {
         if (_busy || _comp == null) return;
         StopPlay();
         _busy = true;
         SetEnabled(false);
         _trimCts = new System.Threading.CancellationTokenSource();
-        _save.Visible = false; _discard.Visible = false;
+        _save.Visible = false; _saveCopy.Visible = false; _discard.Visible = false;
         _cancel.Visible = true; _cancel.Enabled = true; _cancel.BringToFront();
         _progress.Visible = true; _progress.Value = 0;
 
@@ -440,9 +450,10 @@ internal sealed class TrimDialog : Form
             ReleaseSource(); // drop our handle on the staging file before re-encoding it
             await TrimEngine.TrimAsync(_path, trimTemp, start, end, ExportVideoBps, AudioBps, progress, _trimCts.Token);
             FastStart.Process(trimTemp); // moov-first so the clip streams progressively
-            ClipFiles.Promote(trimTemp, _finalPath);
+            string saved = ClipFiles.Promote(trimTemp, _finalPath);
             ClipFiles.Discard(_path); // remove the untrimmed staging recording
             _outcome = Outcome.Saved;
+            if (copyAfter) SavedForCopy?.Invoke(saved);
             Close();
         }
         catch (OperationCanceledException)
@@ -471,7 +482,7 @@ internal sealed class TrimDialog : Form
         if (IsDisposed) return;
         _busy = false;
         _cancel.Visible = false;
-        _save.Visible = true; _discard.Visible = true;
+        _save.Visible = true; _saveCopy.Visible = true; _discard.Visible = true;
         _progress.Visible = false;
         SetEnabled(true);
         _ = ReopenAsync();
@@ -513,7 +524,7 @@ internal sealed class TrimDialog : Form
 
     private void SetEnabled(bool on)
     {
-        _timeline.Enabled = on; _save.Enabled = on; _discard.Enabled = on;
+        _timeline.Enabled = on; _save.Enabled = on; _saveCopy.Enabled = on; _discard.Enabled = on;
         _prev.Enabled = on; _play.Enabled = on; _next.Enabled = on;
     }
 
@@ -527,7 +538,7 @@ internal sealed class TrimDialog : Form
             try
             {
                 Directory.CreateDirectory(Path.GetDirectoryName(_finalPath)!);
-                if (File.Exists(_path)) { ClipFiles.Promote(_path, _finalPath); FastStart.Process(_finalPath); }
+                if (File.Exists(_path)) FastStart.Process(ClipFiles.Promote(_path, _finalPath));
             }
             catch { /* leave the staging file in place if promotion fails */ }
         }

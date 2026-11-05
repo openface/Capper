@@ -20,9 +20,10 @@ public sealed record RecordingResult(bool Success, string OutputPath, double Sec
 /// Captures a single window via Windows.Graphics.Capture and encodes it to an H.264 MP4
 /// with Media Foundation at a fixed average bitrate (so output size is predictable).
 ///
-/// Frames are pulled from the capture pool into a CPU buffer; a separate encode thread
-/// writes that latest frame at the configured frame rate (constant frame rate), which keeps
-/// the clip valid even when the window content is static and makes the size estimate accurate.
+/// Frames are read back from the capture pool into CPU buffers stamped with their capture time and
+/// queued to a separate encode thread, which places them on a constant-frame-rate grid
+/// (<see cref="FrameSlotter"/>) by capture time, repeating the last frame while the window is static.
+/// Constant frame rate keeps the clip valid during static stretches and the size estimate accurate.
 /// </summary>
 public sealed class WindowCaptureRecorder : IDisposable
 {
@@ -66,9 +67,25 @@ public sealed class WindowCaptureRecorder : IDisposable
     private int _outW, _outH;         // encoded output size (preset target)
     private FrameScaler? _scaler;     // GPU downscaler; null = no scaling / MF scales instead
     private string _outputPath = "";
-    private byte[] _frameBuffer = Array.Empty<byte>();
-    private readonly object _bufLock = new();
-    private readonly ManualResetEventSlim _firstFrame = new(false);
+    // Captured frames handed from the capture callback to the encode thread, each stamped with its
+    // capture time. Buffers are recycled through _freeBuffers; _pending is bounded so a stalled
+    // encoder can't grow memory without limit (when full, the newest pending frame is overwritten).
+    private readonly object _queueLock = new();
+    private readonly List<(byte[] Buffer, long TimeHns)> _pending = new();
+    private readonly Stack<byte[]> _freeBuffers = new();
+    private readonly AutoResetEvent _frameSignal = new(false);
+    private int _frameBytes, _maxBuffers, _allocatedBuffers;
+    private int _captureClockState; // 0 = undecided, 1 = frame.SystemRelativeTime, 2 = arrival time
+
+    /// <summary>Diagnostics: frames received from the capture pool, and total time spent handling them.</summary>
+    public int CapturedFrames { get; private set; }
+    public double CaptureHandlerMs { get; private set; }
+    /// <summary>Diagnostics: longest gap between consecutive captured frames (capture timestamps).</summary>
+    public double MaxCaptureGapMs { get; private set; }
+    /// <summary>Diagnostics: output frames that repeated the previous frame (no newer capture).</summary>
+    public long RepeatedSlots { get; private set; }
+    private long _lastCaptureHns = -1;
+    private byte[]? _lastWrittenFrame;
     private volatile bool _stop;
     private Thread? _encodeThread;
     private double _recordedSeconds;
@@ -129,7 +146,10 @@ public sealed class WindowCaptureRecorder : IDisposable
             MiscFlags = ResourceOptionFlags.None,
         };
         _staging = _device.CreateTexture2D(desc);
-        _frameBuffer = new byte[_encW * _encH * 4];
+        _frameBytes = _encW * _encH * 4;
+        // Up to ~8 frames of slack for encoder hiccups, capped at ~256 MB for huge CPU-path canvases.
+        int maxPending = Math.Clamp((int)(256L * 1024 * 1024 / _frameBytes), 2, 8);
+        _maxBuffers = maxPending + 2; // + the frame the encoder is holding + one being filled
 
         // --- Media Foundation sink writer ---
         MediaFactory.MFStartup(false).CheckError();
@@ -187,6 +207,8 @@ public sealed class WindowCaptureRecorder : IDisposable
         _poolSize = size;
         _item.Closed += OnItemClosed; // window closed -> auto-stop and finalize
 
+        UncapCaptureRate(_session);
+
         _isRecording = true;
         _session.StartCapture();
 
@@ -198,6 +220,28 @@ public sealed class WindowCaptureRecorder : IDisposable
             try { _audioClock.Restart(); _audioCapture!.StartRecording(); }
             catch { _audioEnabled = false; }
         }
+    }
+
+    /// <summary>
+    /// By default Windows.Graphics.Capture delivers at most ~60 frames/s (a 16.7 ms minimum interval),
+    /// rounded up to whole vsyncs, so on a 144 Hz display it delivers every 3rd vsync = 48 Hz. 48 Hz
+    /// can't be sampled evenly at 30 fps: output frames alternate between advancing 1 and 2 source
+    /// frames, so motion lurches between half and double speed. Asking for every vsync lets each 30 fps
+    /// slot pick a frame within one vsync of its time (4-5 vsyncs apart at 144 Hz, exactly 2 at 60 Hz).
+    /// Skipped for very large CPU-path canvases, where reading back every vsync costs too much.
+    /// Best-effort: MinUpdateInterval needs Windows 11 24H2+; older builds keep the default rate.
+    /// </summary>
+    private void UncapCaptureRate(GraphicsCaptureSession session)
+    {
+        const int MaxUncappedFrameBytes = 1920 * 1080 * 4;
+        if (_frameBytes > MaxUncappedFrameBytes) return;
+        try
+        {
+            if (Windows.Foundation.Metadata.ApiInformation.IsPropertyPresent(
+                    "Windows.Graphics.Capture.GraphicsCaptureSession", "MinUpdateInterval"))
+                session.MinUpdateInterval = TimeSpan.FromMilliseconds(1);
+        }
+        catch { /* keep the default rate */ }
     }
 
     /// <summary>
@@ -386,6 +430,9 @@ public sealed class WindowCaptureRecorder : IDisposable
             return;
         }
 
+        long handlerStartHns = QpcNowHns();
+        long captureHns = CaptureTimeHns(frame);
+
         using var surface = frame.Surface;
         IntPtr texPtr = Native.GetDxgiInterface(surface, ID3D11Texture2DIid);
         if (texPtr == IntPtr.Zero) return;
@@ -402,9 +449,9 @@ public sealed class WindowCaptureRecorder : IDisposable
             catch { return; }
             ctx.CopyResource(staging, _scaler.Output);
 
-            lock (_bufLock)
-                Direct3DHelpers.ReadStagingRows(ctx, staging, _encW, _encH, _frameBuffer);
-            _firstFrame.Set();
+            var buf = RentBuffer();
+            Direct3DHelpers.ReadStagingRows(ctx, staging, _encW, _encH, buf);
+            EnqueueFrame(buf, captureHns, handlerStartHns);
             return;
         }
 
@@ -415,29 +462,27 @@ public sealed class WindowCaptureRecorder : IDisposable
         if (cw <= 0 || ch <= 0) return;
         ctx.CopySubresourceRegion(staging, 0u, 0u, 0u, 0u, srcTex, 0u, new Box(0, 0, 0, cw, ch, 1));
 
+        var dstBuf = RentBuffer();
         var map = ctx.Map((ID3D11Resource)staging, 0u, MapMode.Read, Vortice.Direct3D11.MapFlags.None);
         try
         {
             int dstStride = _encW * 4;
             int copyBytes = cw * 4;
-            lock (_bufLock)
+            fixed (byte* dstBase = dstBuf)
             {
-                fixed (byte* dstBase = _frameBuffer)
+                byte* src = (byte*)map.DataPointer;
+                for (int y = 0; y < _encH; y++)
                 {
-                    byte* src = (byte*)map.DataPointer;
-                    for (int y = 0; y < _encH; y++)
+                    byte* dstRow = dstBase + (long)y * dstStride;
+                    if (y < ch)
                     {
-                        byte* dstRow = dstBase + (long)y * dstStride;
-                        if (y < ch)
-                        {
-                            Buffer.MemoryCopy(src + (long)y * map.RowPitch, dstRow, dstStride, copyBytes);
-                            if (copyBytes < dstStride)
-                                new Span<byte>(dstRow + copyBytes, dstStride - copyBytes).Clear();
-                        }
-                        else
-                        {
-                            new Span<byte>(dstRow, dstStride).Clear();
-                        }
+                        Buffer.MemoryCopy(src + (long)y * map.RowPitch, dstRow, dstStride, copyBytes);
+                        if (copyBytes < dstStride)
+                            new Span<byte>(dstRow + copyBytes, dstStride - copyBytes).Clear();
+                    }
+                    else
+                    {
+                        new Span<byte>(dstRow, dstStride).Clear();
                     }
                 }
             }
@@ -446,7 +491,72 @@ public sealed class WindowCaptureRecorder : IDisposable
         {
             ctx.Unmap((ID3D11Resource)staging, 0u);
         }
-        _firstFrame.Set();
+        EnqueueFrame(dstBuf, captureHns, handlerStartHns);
+    }
+
+    /// <summary>QueryPerformanceCounter "now" in 100 ns units — the clock frame.SystemRelativeTime uses.</summary>
+    private static long QpcNowHns() =>
+        (long)((Int128)Stopwatch.GetTimestamp() * 10_000_000 / Stopwatch.Frequency);
+
+    /// <summary>
+    /// When the frame was composed. Prefers the system's own capture timestamp (exact, vsync-aligned);
+    /// if that turns out not to be on the QPC clock (sanity-checked on the first frame), falls back to
+    /// arrival time for the whole recording so timestamps never mix clocks.
+    /// </summary>
+    private long CaptureTimeHns(Direct3D11CaptureFrame frame)
+    {
+        long now = QpcNowHns();
+        long sys = frame.SystemRelativeTime.Ticks;
+        if (_captureClockState == 0)
+            _captureClockState = Math.Abs(now - sys) < 10_000_000 ? 1 : 2; // within 1 s of now?
+        return _captureClockState == 1 ? Math.Min(sys, now) : now;
+    }
+
+    /// <summary>
+    /// A frame-sized buffer for the capture thread to fill: a recycled one, a new one (up to the cap),
+    /// or, if the encoder has fallen so far behind that every buffer is queued, the newest pending
+    /// frame is reclaimed and overwritten (dropping it; the encoder then repeats the frame before it).
+    /// </summary>
+    private byte[] RentBuffer()
+    {
+        lock (_queueLock)
+        {
+            if (_freeBuffers.Count > 0) return _freeBuffers.Pop();
+            if (_allocatedBuffers < _maxBuffers || _pending.Count == 0)
+            {
+                _allocatedBuffers++;
+                return new byte[_frameBytes];
+            }
+            var last = _pending[^1];
+            _pending.RemoveAt(_pending.Count - 1);
+            return last.Buffer;
+        }
+    }
+
+    private void ReturnBuffer(byte[] buf)
+    {
+        lock (_queueLock) _freeBuffers.Push(buf);
+    }
+
+    private void EnqueueFrame(byte[] buf, long captureHns, long handlerStartHns)
+    {
+        CapturedFrames++;
+        if (_lastCaptureHns >= 0) MaxCaptureGapMs = Math.Max(MaxCaptureGapMs, (captureHns - _lastCaptureHns) / 10_000.0);
+        _lastCaptureHns = captureHns;
+        CaptureHandlerMs += (QpcNowHns() - handlerStartHns) / 10_000.0;
+        lock (_queueLock) _pending.Add((buf, captureHns));
+        try { _frameSignal.Set(); } catch (ObjectDisposedException) { }
+    }
+
+    private bool TryDequeueFrame(out (byte[] Buffer, long TimeHns) frame)
+    {
+        lock (_queueLock)
+        {
+            if (_pending.Count == 0) { frame = default; return false; }
+            frame = _pending[0];
+            _pending.RemoveAt(0);
+            return true;
+        }
     }
 
     private void OnItemClosed(GraphicsCaptureItem sender, object args)
@@ -455,58 +565,76 @@ public sealed class WindowCaptureRecorder : IDisposable
         try { Stop(); } catch { }
     }
 
+    /// <summary>
+    /// Turns the irregular stream of captured frames (Windows.Graphics.Capture only delivers one when
+    /// the window changes) into constant-frame-rate video. <see cref="FrameSlotter"/> lays a fixed
+    /// 1/fps grid over the capture timeline; each slot shows the newest frame captured at or before
+    /// its time. Slots are closed by the <i>next frame's capture timestamp</i>, not by when this thread
+    /// wakes up, so Windows' ~15.6 ms sleep granularity can't jitter the sampling. (It used to: the
+    /// loop overslept, then grabbed twice in a row, duplicating one frame and skipping the next, which
+    /// plays back as stutter.) The wall clock only closes slots while the window is static.
+    /// Timestamps come from the slot index, so playback speed stays true even if the encoder lags.
+    /// </summary>
     private void EncodeLoop()
     {
-        // Give the first real frame a moment so the clip doesn't start on a black frame.
-        _firstFrame.Wait(2000);
+        // How late a frame can reach us after its capture timestamp (GPU readback + scheduling). Only
+        // used to close slots during static stretches, where a little extra latency is invisible.
+        const long CaptureLatencyHns = 1_000_000; // 100 ms
 
-        long durationHns = 10_000_000L / _fps;
-        var local = new byte[_frameBuffer.Length];
-        var sw = Stopwatch.StartNew();
-        long idx = 0;
-        long lastTimeHns = -1;
         string? error = null;
+        FrameSlotter? slotter = null;
 
         try
         {
-            while (!_stop)
+            // Give the first real frame a moment so the clip doesn't start on a black frame.
+            var wait = Stopwatch.StartNew();
+            (byte[] Buffer, long TimeHns) first;
+            while (!TryDequeueFrame(out first) && !_stop && wait.ElapsedMilliseconds < 2000)
+                _frameSignal.WaitOne(50);
+
+            byte[] held;
+            if (first.Buffer != null)
             {
-                lock (_bufLock) Array.Copy(_frameBuffer, local, local.Length);
+                held = first.Buffer;
+                slotter = FrameSlotter.StartingAt(_fps, first.TimeHns);
+            }
+            else
+            {
+                held = new byte[_frameBytes]; // no frame yet: start black
+                slotter = new FrameSlotter(_fps, QpcNowHns());
+            }
 
-                var buffer = MediaFactory.MFCreateMemoryBuffer(local.Length);
-                buffer.Lock(out IntPtr dst, out _, out _);
-                Marshal.Copy(local, 0, dst, local.Length);
-                buffer.Unlock();
-                buffer.CurrentLength = local.Length;
-
-                // Stamp the frame with the actual elapsed wall-clock time, not idx*(1/fps). If the
-                // encoder can't sustain the target fps, WriteSample blocks and the loop emits fewer
-                // frames per real second; a frame-counter timestamp would then pack those frames
-                // closer together and play the clip back too fast ("rushed", worst near the end where
-                // the encoder has fallen furthest behind). Real-clock timestamps keep playback at true
-                // speed — the stream just dips to a lower effective fps under load instead.
-                long timeHns = sw.Elapsed.Ticks; // TimeSpan ticks are 100 ns == hns
-                if (timeHns <= lastTimeHns) timeHns = lastTimeHns + 1; // MF needs strictly increasing times
-                lastTimeHns = timeHns;
-
-                var sample = MediaFactory.MFCreateSample();
-                sample.AddBuffer(buffer);
-                sample.SampleTime = timeHns;
-                sample.SampleDuration = durationHns;
-                lock (_writerLock)
+            while (true)
+            {
+                // Each new frame closes every slot before its capture time; those show the held frame.
+                while (TryDequeueFrame(out var f))
                 {
-                    if (!_finalized) _writer!.WriteSample(_streamIndex, sample);
+                    for (long n = slotter.SlotsBefore(f.TimeHns); n > 0; n--)
+                        WriteVideoSlot(held, slotter);
+                    ReturnBuffer(held);
+                    held = f.Buffer;
                 }
-                sample.Dispose();
-                buffer.Dispose();
 
-                idx++;
+                if (_stop)
+                {
+                    // Fill the timeline up to the moment recording stopped, then finish.
+                    for (long n = slotter.SlotsBefore(QpcNowHns()); n > 0; n--)
+                        WriteVideoSlot(held, slotter);
+                    if (slotter.NextSlot == 0) WriteVideoSlot(held, slotter); // never an empty stream
+                    break;
+                }
 
-                // Pace to wall-clock so we aim for ~fps frames per second (the sleep is skipped when
-                // we've already fallen behind, letting the loop catch back up).
-                double nextMs = idx * 1000.0 / _fps;
-                int sleep = (int)(nextMs - sw.Elapsed.TotalMilliseconds);
-                if (sleep > 1) Thread.Sleep(sleep);
+                // Static window (no new frames): repeat the held frame once a slot is safely past.
+                long due = slotter.SlotsBefore(QpcNowHns() - CaptureLatencyHns);
+                for (long n = due; n > 0; n--)
+                    WriteVideoSlot(held, slotter);
+
+                if (due == 0)
+                {
+                    long deadline = slotter.OriginHns + slotter.SlotTimeHns(slotter.NextSlot) + CaptureLatencyHns;
+                    int waitMs = (int)Math.Clamp((deadline - QpcNowHns()) / 10_000 + 1, 1, 100);
+                    _frameSignal.WaitOne(waitMs);
+                }
             }
         }
         catch (Exception ex)
@@ -514,8 +642,33 @@ public sealed class WindowCaptureRecorder : IDisposable
             error = ex.Message;
         }
 
-        _recordedSeconds = lastTimeHns > 0 ? (lastTimeHns + durationHns) / 10_000_000.0 : 0;
+        _recordedSeconds = slotter != null ? slotter.SlotTimeHns(slotter.NextSlot) / 10_000_000.0 : 0;
         FinishInternal(error);
+    }
+
+    /// <summary>Encode <paramref name="frame"/> as the next constant-rate output slot.</summary>
+    private void WriteVideoSlot(byte[] frame, FrameSlotter slotter)
+    {
+        long slot = slotter.Take();
+        if (ReferenceEquals(frame, _lastWrittenFrame)) RepeatedSlots++;
+        _lastWrittenFrame = frame;
+
+        var buffer = MediaFactory.MFCreateMemoryBuffer(frame.Length);
+        buffer.Lock(out IntPtr dst, out _, out _);
+        Marshal.Copy(frame, 0, dst, frame.Length);
+        buffer.Unlock();
+        buffer.CurrentLength = frame.Length;
+
+        var sample = MediaFactory.MFCreateSample();
+        sample.AddBuffer(buffer);
+        sample.SampleTime = slotter.SlotTimeHns(slot);
+        sample.SampleDuration = slotter.SlotDurationHns(slot);
+        lock (_writerLock)
+        {
+            if (!_finalized) _writer!.WriteSample(_streamIndex, sample);
+        }
+        sample.Dispose();
+        buffer.Dispose();
     }
 
     /// <summary>Manual stop. Blocks until the file is finalized.</summary>
@@ -523,6 +676,7 @@ public sealed class WindowCaptureRecorder : IDisposable
     {
         if (!IsRecording) return;
         _stop = true;
+        _frameSignal.Set(); // wake the encoder if it's waiting
         _encodeThread?.Join(8000);
         FinishInternal(null);
     }
@@ -576,7 +730,26 @@ public sealed class WindowCaptureRecorder : IDisposable
         _audioCapture = null; _scaler = null;
 
         _isRecording = false;
+        LogCaptureStats(error);
         Stopped?.Invoke(new RecordingResult(error == null, _outputPath, _recordedSeconds, error));
+    }
+
+    /// <summary>Append one line of capture-smoothness stats to %APPDATA%\Capper\recordings.log, so a
+    /// stuttery clip can be traced to its cause (source not producing frames vs. frames lost).</summary>
+    private void LogCaptureStats(string? error)
+    {
+        try
+        {
+            double secs = Math.Max(0.001, _recordedSeconds);
+            string line = $"{DateTime.Now:yyyy-MM-dd HH:mm:ss} {Path.GetFileName(_outputPath)}: {_recordedSeconds:0.0}s, " +
+                          $"captured {CapturedFrames / secs:0} fps, longest gap {MaxCaptureGapMs:0} ms, " +
+                          $"repeated {RepeatedSlots}/{(long)Math.Round(secs * _fps)} output frames, " +
+                          $"handler avg {CaptureHandlerMs / Math.Max(1, CapturedFrames):0.0} ms" +
+                          (error != null ? $", error: {error}" : "");
+            Directory.CreateDirectory(AppConfig.AppDataDir);
+            File.AppendAllText(Path.Combine(AppConfig.AppDataDir, "recordings.log"), line + Environment.NewLine);
+        }
+        catch { /* diagnostics only */ }
     }
 
     private static ulong Pack(uint high, uint low) => ((ulong)high << 32) | low;
@@ -584,6 +757,6 @@ public sealed class WindowCaptureRecorder : IDisposable
     public void Dispose()
     {
         try { Stop(); } catch { }
-        _firstFrame.Dispose();
+        _frameSignal.Dispose();
     }
 }

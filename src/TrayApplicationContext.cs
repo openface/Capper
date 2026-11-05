@@ -259,6 +259,7 @@ internal sealed class TrayApplicationContext : ApplicationContext
     private void OpenTrimDialog(string stagingPath, string finalPath)
     {
         var dlg = new TrimDialog(stagingPath, finalPath, _config);
+        dlg.SavedForCopy += CopyClip; // "Save & Copy": the saved file goes to the clipboard
         dlg.Show();
         dlg.Activate();
     }
@@ -314,6 +315,21 @@ internal sealed class TrayApplicationContext : ApplicationContext
         _configForm.FormClosed += (_, _) => _configForm = null;
         _configForm.Show();
         _configForm.Activate();
+    }
+
+    /// <summary>Put a saved clip on the clipboard ("Save &amp; Copy" in the Trim dialog), ready to paste into Discord.</summary>
+    private void CopyClip(string clip)
+    {
+        try
+        {
+            ClipClipboard.CopyFile(clip);
+            Notify("Clip copied", $"{ClipClipboard.Describe(clip)} — paste it into Discord with Ctrl+V.",
+                ToolTipIcon.Info, 3000);
+        }
+        catch (Exception ex)
+        {
+            Notify("Capper — copy failed", ex.Message, ToolTipIcon.Error);
+        }
     }
 
     private void OpenOutputFolder()
